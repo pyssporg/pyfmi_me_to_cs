@@ -1,3 +1,5 @@
+> **Note**: This decision's canonical home is now `product-breakdown/02-architecture/decisions/AD-003-fixed-point-iteration.md`. See that location for the authoritative version with updated artifact paths.
+
 # AD-003: Fixed-Point Iteration for Algebraic Loops
 
 **Status:** Accepted

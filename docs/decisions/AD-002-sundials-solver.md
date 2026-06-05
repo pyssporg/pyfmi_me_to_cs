@@ -1,3 +1,5 @@
+> **Note**: This decision's canonical home is now `product-breakdown/02-architecture/decisions/AD-002-sundials-solver.md`. See that location for the authoritative version with updated artifact paths.
+
 # AD-002: SUNDIALS Solver
 
 **Status:** Accepted

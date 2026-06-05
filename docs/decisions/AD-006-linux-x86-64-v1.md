@@ -1,3 +1,5 @@
+> **Note**: This decision's canonical home is now `product-breakdown/02-architecture/decisions/AD-006-linux-x86-64-v1.md`. See that location for the authoritative version with updated artifact paths.
+
 # AD-006: Linux x86_64 Only (v1)
 
 **Status:** Accepted

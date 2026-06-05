@@ -1,3 +1,5 @@
+> **Note**: This decision's canonical home is now `product-breakdown/02-architecture/decisions/AD-004-embedded-fmu-resources.md`. See that location for the authoritative version with updated artifact paths.
+
 # AD-004: Embedded FMU Resources
 
 **Status:** Accepted

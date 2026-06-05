@@ -1,3 +1,5 @@
+> **Note**: This decision's canonical home is now `product-breakdown/02-architecture/decisions/AD-005-toml-spec-format.md`. See that location for the authoritative version with updated artifact paths.
+
 # AD-005: TOML Spec Format
 
 **Status:** Accepted
