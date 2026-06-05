@@ -19,6 +19,3 @@
 5. Guaranteed convergence for arbitrary algebraic loops.
 6. Distributed or real-time execution.
 
-## Source
-
-Derived from `cs-fmu-packager-project/README.md` (Scope section).

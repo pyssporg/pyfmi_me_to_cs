@@ -14,6 +14,3 @@ The packaged FMU exposes a normal Co-Simulation interface to an external master 
 
 The main purpose is to make solver placement an explicit architectural choice. A coupled subsystem can be treated as one Co-Simulation component by the outer orchestration layer while retaining a structured internal Model Exchange representation and a local integration or loop-handling policy.
 
-## Source
-
-Derived from `cs-fmu-packager-project/README.md`.
