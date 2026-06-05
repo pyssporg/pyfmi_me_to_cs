@@ -95,6 +95,15 @@ class TestFmuInspection:
 
         os.unlink(path)
 
+    def test_inspect_fmu_model_identifier(self):
+        """FmuMetadata should contain modelIdentifier parsed from XML."""
+        fd, path = tempfile.mkstemp(suffix=".fmu")
+        os.close(fd)
+        _create_minimal_me_fmu(path)
+        meta = inspect_fmu(path)
+        assert meta.model_identifier == "TestFMU"
+        os.unlink(path)
+
     def test_inspect_nonexistent_fmu(self):
         with pytest.raises(FmuInspectionError) as exc:
             inspect_fmu("/nonexistent/path.fmu")

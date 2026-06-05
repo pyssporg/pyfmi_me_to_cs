@@ -8,6 +8,7 @@ See --help for full option details.
 
 from __future__ import annotations
 
+import importlib.resources as resources
 import json
 import os
 import sys
@@ -32,20 +33,53 @@ from cs_fmu_packager.packager import assemble_fmu, write_build_report
 from cs_fmu_packager.spec import parse_spec
 
 
-def _c_headers_dir() -> str:
-    """Locate the c_headers directory relative to the package."""
-    # Check project root first, then package-adjacent
+def _resolve_c_headers_dir(custom_path: Optional[str]) -> str:
+    """Resolve the c_headers directory containing FMI 2.0 standard headers.
+
+    Resolution order:
+    1. Explicit --c-headers CLI option (if provided).
+    2. importlib.resources lookup from installed package data.
+    3. Heuristic fallback for development/source-tree usage.
+    4. BuildError with actionable instructions if none resolve.
+    """
+    # Priority 1: explicit CLI override
+    if custom_path is not None:
+        resolved = os.path.abspath(custom_path)
+        if not os.path.isdir(resolved):
+            raise BuildError(
+                f"Cannot find c-headers directory: '{custom_path}' does not exist "
+                f"or is not a directory. Provide a valid path containing FMI 2.0 "
+                f"header files (fmi2Functions.h, fmi2FunctionTypes.h, fmi2TypesPlatform.h)."
+            )
+        return resolved
+
+    # Priority 2: importlib.resources (works for installed packages)
+    try:
+        headers_path = resources.files("cs_fmu_packager").joinpath("c_headers")
+        if headers_path.is_dir():
+            return str(headers_path)
+    except (TypeError, ModuleNotFoundError, OSError):
+        pass
+
+    # Priority 3: heuristic fallback for development usage
     candidates = [
+        os.path.join(os.path.dirname(__file__), "c_headers"),
         os.path.join(os.getcwd(), "c_headers"),
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "c_headers"),
-        os.path.join(os.path.dirname(__file__), "..", "..", "c_headers"),
     ]
     for path in candidates:
         resolved = os.path.abspath(path)
         if os.path.isdir(resolved):
             return resolved
-    return os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "c_headers")
+
+    # Terminal failure: nothing worked
+    raise BuildError(
+        "Cannot locate FMI 2.0 C headers directory.\n"
+        "  Expected directory: c_headers (containing fmi2Functions.h, "
+        "fmi2FunctionTypes.h, fmi2TypesPlatform.h)\n"
+        "  The headers should be installed as package data. Try:\n"
+        "    pip install .\n"
+        "  Or specify the path explicitly:\n"
+        "    cs-fmu-packager --c-headers /path/to/c_headers ..."
     )
 
 
@@ -70,6 +104,12 @@ def _c_headers_dir() -> str:
     help="Path to vcpkg installation",
 )
 @click.option(
+    "--c-headers",
+    type=click.Path(exists=False, file_okay=False),
+    default=None,
+    help="Path to directory containing FMI 2.0 C headers (default: auto-detect from package data)",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -86,6 +126,7 @@ def main(
     output: Optional[str],
     report: Optional[str],
     vcpkg_root: Optional[str],
+    c_headers: Optional[str],
     dry_run: bool,
     verbose: bool,
 ) -> None:
@@ -94,7 +135,7 @@ def main(
     SPEC is the path to a TOML package specification file.
     """
     try:
-        _execute(spec, output, report, vcpkg_root, dry_run, verbose)
+        _execute(spec, output, report, vcpkg_root, c_headers, dry_run, verbose)
     except CsFmuPackagerError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -105,6 +146,7 @@ def _execute(
     output_path: Optional[str],
     report_path: Optional[str],
     vcpkg_root: Optional[str],
+    c_headers: Optional[str],
     dry_run: bool,
     verbose: bool,
 ) -> None:
@@ -152,7 +194,8 @@ def _execute(
 
     with tempfile.TemporaryDirectory(prefix="cs_fmu_build_") as build_dir:
         try:
-            gen_result = generate_all(spec, mapping, build_dir, _c_headers_dir())
+            resolved_headers_dir = _resolve_c_headers_dir(c_headers)
+            gen_result = generate_all(spec, mapping, build_dir, resolved_headers_dir)
         except CodegenError as e:
             raise CodegenError(f"Code generation failed: {e}") from e
 

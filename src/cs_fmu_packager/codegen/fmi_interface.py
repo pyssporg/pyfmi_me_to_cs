@@ -96,6 +96,7 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
     # Build FMU loading code
     fmu_load_blocks = []
     for idx, (fmu_id, fmu_ref) in enumerate(spec.fmus.items()):
+        model_identifier = mapping.fmus[fmu_id].model_identifier or fmu_id
         fmu_load_blocks.append(
             f"""    /* Load FMU: {fmu_id} */
     {{
@@ -106,7 +107,7 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
         /* Build path to the FMU shared library */
         char lib_path[MAX_RESOURCE_PATH];
         snprintf(lib_path, sizeof(lib_path),
-                 "resources/%s/binaries/linux64/*.so", "{fmu_id}");
+                 "resources/%s/binaries/linux64/{model_identifier}.so", "{fmu_id}");
 
         fmu->libHandle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
         if (fmu->libHandle == NULL) {{

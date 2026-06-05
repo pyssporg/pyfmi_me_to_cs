@@ -108,6 +108,7 @@ def test_unknown_variable_reference(fmus_dir: str):
     with pytest.raises(MappingError) as exc:
         build_mapping(spec)
     assert "not found" in str(exc.value)
+    assert "Connection 0:" in str(exc.value)
 
 
 def test_unknown_fmu_in_connection(fmus_dir: str):
@@ -122,8 +123,9 @@ def test_unknown_fmu_in_connection(fmus_dir: str):
         ],
         variables=[],
     )
-    with pytest.raises(MappingError):
+    with pytest.raises(MappingError) as exc:
         build_mapping(spec)
+    assert "Connection 0:" in str(exc.value)
 
 
 def test_parameter_mapping(fmus_dir: str):

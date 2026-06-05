@@ -17,6 +17,9 @@
 - Architecture decision records (AD-001 through AD-006)
 - Product breakdown structure (this directory)
 
+| IMP-006 | GitHub Actions CI workflow | Evolution | Completed | 2026-06-05 | `.github/workflows/test.yml` |
+| IMP-011 | Test fixture improvements   | Evolution | Completed | 2026-06-05 | `tests/conftest.py`, `tests/fixtures/` |
+
 ### Constraints
 
 - Linux x86_64 only

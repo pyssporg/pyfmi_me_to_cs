@@ -30,18 +30,21 @@ def _resolve_fmu_variable(
     fmu_id: str,
     var_name: str,
     fmu_metadatas: Dict[str, FmuMetadata],
+    origin: str = "",
 ) -> ScalarVariable:
     """Look up a variable in an FMU's metadata."""
     metadata = fmu_metadatas.get(fmu_id)
     if metadata is None:
-        raise MappingError(f"FMU '{fmu_id}' not found in inspected metadata")
+        msg = f"FMU '{fmu_id}' not found in inspected metadata"
+        raise MappingError(f"{origin}: {msg}" if origin else msg)
 
     var = metadata.variables.get(var_name)
     if var is None:
-        raise MappingError(
+        msg = (
             f"Variable '{var_name}' not found in FMU '{fmu_id}' "
             f"(available: {sorted(metadata.variables.keys())})"
         )
+        raise MappingError(f"{origin}: {msg}" if origin else msg)
     return var
 
 
@@ -211,9 +214,9 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
 
     # Resolve connections
     resolved_connections: List[ResolvedConnection] = []
-    for conn in spec.connections:
-        source_var = _resolve_fmu_variable(conn.source_fmu, conn.source_variable, fmu_metadatas)
-        target_var = _resolve_fmu_variable(conn.target_fmu, conn.target_variable, fmu_metadatas)
+    for idx, conn in enumerate(spec.connections):
+        source_var = _resolve_fmu_variable(conn.source_fmu, conn.source_variable, fmu_metadatas, origin=f"Connection {idx}")
+        target_var = _resolve_fmu_variable(conn.target_fmu, conn.target_variable, fmu_metadatas, origin=f"Connection {idx}")
 
         resolved = ResolvedConnection(
             source_fmu=conn.source_fmu,
@@ -240,7 +243,7 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
     wrapper_outputs: List[MappedVariable] = []
     wrapper_parameters: List[MappedVariable] = []
 
-    for var in spec.variables:
+    for idx, var in enumerate(spec.variables):
         mapped = MappedVariable(
             wrapper_name=var.name,
             variable_type=var.type,
@@ -251,7 +254,7 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
         if var.causality == "input":
             # Inputs target internal FMU variables
             if var.target_fmu and var.target_variable:
-                sv = _resolve_fmu_variable(var.target_fmu, var.target_variable, fmu_metadatas)
+                sv = _resolve_fmu_variable(var.target_fmu, var.target_variable, fmu_metadatas, origin=f"Variable {idx} target")
                 mapped.target_fmu = var.target_fmu
                 mapped.target_variable = var.target_variable
                 mapped.target_value_reference = sv.value_reference
@@ -262,7 +265,7 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
         elif var.causality == "output":
             # Outputs source from internal FMU variables
             if var.source_fmu and var.source_variable:
-                sv = _resolve_fmu_variable(var.source_fmu, var.source_variable, fmu_metadatas)
+                sv = _resolve_fmu_variable(var.source_fmu, var.source_variable, fmu_metadatas, origin=f"Variable {idx} source")
                 mapped.source_fmu = var.source_fmu
                 mapped.source_variable = var.source_variable
                 mapped.source_value_reference = sv.value_reference
@@ -273,7 +276,7 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
         elif var.causality == "parameter":
             # Parameters target internal FMU variables
             if var.target_fmu and var.target_variable:
-                sv = _resolve_fmu_variable(var.target_fmu, var.target_variable, fmu_metadatas)
+                sv = _resolve_fmu_variable(var.target_fmu, var.target_variable, fmu_metadatas, origin=f"Variable {idx} target")
                 mapped.target_fmu = var.target_fmu
                 mapped.target_variable = var.target_variable
                 mapped.target_value_reference = sv.value_reference

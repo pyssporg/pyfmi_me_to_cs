@@ -123,6 +123,7 @@ class FmuMetadata:
     provides_directional_derivatives: bool = False
     variables: Dict[str, ScalarVariable] = field(default_factory=dict)
     variables_by_ref: Dict[int, ScalarVariable] = field(default_factory=dict)
+    model_identifier: str = ""
     continuous_states: List[str] = field(default_factory=list)
     event_indicators: List[str] = field(default_factory=list)
     unsupported_features: List[str] = field(default_factory=list)

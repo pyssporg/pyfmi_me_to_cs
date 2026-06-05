@@ -169,7 +169,9 @@ def inspect_fmu(path: str) -> FmuMetadata:
     can_get_set_state = False
     can_serialize = False
     can_provide_directional = False
+    model_identifier = ""
     if me_elem is not None:
+        model_identifier = me_elem.get("modelIdentifier", "")
         can_get_set_state = me_elem.get("canGetAndSetFMUstate", "false").lower() == "true"
         can_serialize = me_elem.get("canSerializeFMUstate", "false").lower() == "true"
         can_provide_directional = me_elem.get("providesDirectionalDerivatives", "false").lower() == "true"
@@ -197,6 +199,7 @@ def inspect_fmu(path: str) -> FmuMetadata:
         fmi_version=fmi_version,
         guid=guid,
         model_name=model_name,
+        model_identifier=model_identifier,
         model_types=model_types,
         can_get_and_set_fmu_state=can_get_set_state,
         can_serialize_fmu_state=can_serialize,

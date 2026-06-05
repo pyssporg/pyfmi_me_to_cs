@@ -38,8 +38,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(SUNDIALS REQUIRED COMPONENTS arkode nvecserial)
 
 # Include FMI 2.0 standard headers
-set(FMI_HEADERS_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}/c_headers")
-set(WRAPPER_HEADERS_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}/src/cs_fmu_packager/codegen")
+set(FMI_HEADERS_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}")
+set(WRAPPER_HEADERS_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}")
 
 # Source files
 set(SOURCES

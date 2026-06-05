@@ -7,6 +7,7 @@ import tempfile
 import pytest
 
 from cs_fmu_packager.codegen.cmake import generate_cmake
+from cs_fmu_packager.codegen.fmi_interface import generate_fmi_interface_impl
 from cs_fmu_packager.model_description import generate_model_description
 from cs_fmu_packager.models import (
     FmuMetadata,
@@ -42,6 +43,7 @@ def sample_mapping() -> MappingTable:
                 fmi_version="2.0",
                 guid="{src-guid}",
                 model_name="SrcFMU",
+                model_identifier="src_model",
                 variables={
                     "u": ScalarVariable(name="u", value_reference=0, type="Real", causality="input"),
                     "y": ScalarVariable(name="y", value_reference=1, type="Real", causality="output"),
@@ -51,6 +53,7 @@ def sample_mapping() -> MappingTable:
                 fmi_version="2.0",
                 guid="{tgt-guid}",
                 model_name="TgtFMU",
+                model_identifier="tgt_model",
                 variables={
                     "u": ScalarVariable(name="u", value_reference=0, type="Real", causality="input"),
                     "y": ScalarVariable(name="y", value_reference=1, type="Real", causality="output"),
@@ -88,6 +91,9 @@ class TestCmakeCodegen:
         assert "fixed_point_iteration.c" in content
         assert "binaries/linux64" in content
         assert "SHARED" in content
+        # IMP-003: header directories point flat at build directory root
+        assert 'set(FMI_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}")' in content
+        assert 'set(WRAPPER_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}")' in content
 
 
 class TestModelDescriptionCodegen:
@@ -154,3 +160,47 @@ class TestModelDescriptionCodegen:
         assert 'name="int_input"' in content
         assert 'name="bool_input"' in content
         assert 'name="str_input"' in content
+
+
+class TestCHeadersResolution:
+    """Verify c_headers resolution logic (IMP-005)."""
+
+    def test_default_resolution_via_package_data(self):
+        """Package-data c_headers should be discoverable via importlib.resources."""
+        from cs_fmu_packager.cli import _resolve_c_headers_dir
+        path = _resolve_c_headers_dir(None)
+        assert os.path.isdir(path), f"Resolved path {path} is not a directory"
+        for hdr in ("fmi2Functions.h", "fmi2FunctionTypes.h", "fmi2TypesPlatform.h"):
+            assert os.path.exists(os.path.join(path, hdr)), \
+                f"Missing header {hdr} in resolved path {path}"
+
+    def test_explicit_c_headers_override(self, tmp_path):
+        """Explicit --c-headers path should be used when provided."""
+        from cs_fmu_packager.cli import _resolve_c_headers_dir
+        hdr_dir = tmp_path / "custom_headers"
+        hdr_dir.mkdir()
+        (hdr_dir / "fmi2Functions.h").write_text("// fake")
+        (hdr_dir / "fmi2FunctionTypes.h").write_text("// fake")
+        (hdr_dir / "fmi2TypesPlatform.h").write_text("// fake")
+        path = _resolve_c_headers_dir(str(hdr_dir))
+        assert path == str(hdr_dir)
+
+    def test_invalid_c_headers_raises_error(self, tmp_path):
+        """Invalid --c-headers path should raise BuildError."""
+        from cs_fmu_packager.cli import _resolve_c_headers_dir
+        from cs_fmu_packager.errors import BuildError
+        with pytest.raises(BuildError):
+            _resolve_c_headers_dir(str(tmp_path / "nonexistent"))
+
+
+class TestFmiInterfaceCodegen:
+    """Tests for fmi2_interface.c generation."""
+
+    def test_internal_fmu_load_path(self, sample_spec, sample_mapping):
+        """Generated C code uses modelIdentifier-based path, not wildcard."""
+        content = generate_fmi_interface_impl(sample_spec, sample_mapping)
+        # Should NOT contain wildcard *.so in the dlopen path
+        assert '*.so"' not in content, "Wildcard *.so should not appear in dlopen path"
+        # Should contain the resolved model identifier paths
+        assert "src_model.so" in content
+        assert "tgt_model.so" in content

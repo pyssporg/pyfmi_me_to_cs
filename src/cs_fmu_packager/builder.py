@@ -59,7 +59,20 @@ def _find_vcpkg_root(vcpkg_root_arg: Optional[str] = None) -> str:
             return path
 
     raise BuildError(
-        "vcpkg root not found. Set VCPKG_ROOT environment variable or pass --vcpkg-root"
+        "vcpkg root not found.\n"
+        "\n"
+        "Install vcpkg (https://github.com/microsoft/vcpkg):\n"
+        "  1. git clone https://github.com/microsoft/vcpkg\n"
+        "  2. cd vcpkg && ./bootstrap-vcpkg.sh (Linux)\n"
+        "  3. Export VCPKG_ROOT=<cloned-path>\n"
+        "  4. Run: vcpkg install sundials\n"
+        "\n"
+        "The following heuristic paths were checked:\n"
+        + "\n".join(f"  - {p}" for p in common_paths)
+        + "\n"
+        "\n"
+        "Set VCPKG_ROOT, install vcpkg at one of the paths above, "
+        "or pass --vcpkg-root <path>."
     )
 
 

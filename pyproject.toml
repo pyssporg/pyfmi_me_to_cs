@@ -27,4 +27,4 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"cs_fmu_packager" = ["c_templates/*.jinja"]
+"cs_fmu_packager" = ["c_templates/*.jinja", "c_headers/*"]

@@ -77,10 +77,34 @@ def generate_all(
         generated[fixed_path] = fixed_impl
 
         # Copy C headers into build dir
-        for hdr in ("fmi2Functions.h", "fmi2TypesPlatform.h", "fmi2FunctionTypes.h"):
+        required_headers = ("fmi2Functions.h", "fmi2TypesPlatform.h", "fmi2FunctionTypes.h")
+        missing_headers: list[str] = []
+        for hdr in required_headers:
             src = os.path.join(c_headers_dir, hdr)
-            if os.path.exists(src):
-                dst = os.path.join(output_dir, hdr)
+            if not os.path.exists(src):
+                missing_headers.append(hdr)
+                continue
+            dst = os.path.join(output_dir, hdr)
+            with open(src, "r") as f_in:
+                content = f_in.read()
+            with open(dst, "w") as f_out:
+                f_out.write(content)
+            generated[dst] = content
+
+        if missing_headers:
+            raise CodegenError(
+                f"Missing required FMI 2.0 header file(s) in '{c_headers_dir}': "
+                f"{', '.join(missing_headers)}. "
+                f"Ensure the package is properly installed or use --c-headers to "
+                f"specify a directory containing all required headers."
+            )
+
+        # Copy codegen headers into build dir
+        codegen_dir = os.path.dirname(__file__)
+        for hdr_file in os.listdir(codegen_dir):
+            if hdr_file.endswith(".h"):
+                src = os.path.join(codegen_dir, hdr_file)
+                dst = os.path.join(output_dir, hdr_file)
                 with open(src, "r") as f_in:
                     content = f_in.read()
                 with open(dst, "w") as f_out:

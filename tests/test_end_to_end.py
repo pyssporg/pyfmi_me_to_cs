@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import tempfile
 import zipfile
 
 import pytest
 
-from cs_fmu_packager.cli import main
 from cs_fmu_packager.packager import assemble_fmu, write_build_report
 from cs_fmu_packager.models import BuildReport
 
@@ -62,22 +60,8 @@ communication_step = 0.01
 """
 
 
-@pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
-class TestEndToEndWithBuild:
-    """VR-001, VR-002, VR-003, VR-006, VR-007, VR-008"""
-
-    def test_dry_run_validates_spec(self):
-        """Dry run only validates spec, doesn't build."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write(_minimal_toml())
-            spec_path = f.name
-
-        # This will fail because FMU files don't exist, but spec parsing should work
-        # Actually, mapper tries to inspect FMUs, so this will fail at that stage.
-        # So we test the spec-only path via dry_run but with real FMU files needed.
-
-        # Let's just skip for now; the dry-run test is better done with actual FMU files.
-        os.unlink(spec_path)
+class TestAssemblyWithoutBuild:
+    """Assembly tests that create fake .so/FMU and do NOT need vcpkg."""
 
     def test_assembled_fmu_structure(self):
         """Test that the assembled FMU has correct ZIP structure."""
@@ -130,52 +114,6 @@ class TestEndToEndWithBuild:
                 assert "modelDescription.xml" in names
                 assert "binaries/linux64/test_fmu.so" in names
                 assert "resources/internal.fmu" in names
-
-
-@pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
-class TestBuildReport:
-    """VR-007: Build report verification."""
-
-    def test_report_content(self):
-        """Validate build report format and content."""
-        import tempfile
-        import os
-        import json
-
-        with tempfile.TemporaryDirectory() as d:
-            report = BuildReport(
-                spec_path="spec.toml",
-                output_path="out.fmu",
-                tool_version="0.1.0",
-                fmu_count=2,
-                variable_count=3,
-                connection_count=1,
-                algebraic_loop_count=1,
-                solver_type="fixed_step",
-                solver_step_size=0.001,
-                communication_step=0.01,
-                warnings=["Test warning"],
-                fmu_guids={"a": "{guid-a}"},
-                wrapper_variables=["inp", "out"],
-            )
-
-            report_path = os.path.join(d, "report.json")
-            write_build_report(report, report_path)
-
-            with open(report_path) as f:
-                data = json.load(f)
-
-            assert data["tool_version"] == "0.1.0"
-            assert data["fmu_count"] == 2
-            assert data["solver_type"] == "fixed_step"
-            assert data["algebraic_loop_count"] == 1
-            assert "Test warning" in data["warnings"]
-            assert data["fmu_guids"]["a"] == "{guid-a}"
-            assert "inp" in data["wrapper_variables"]
-
-
-class TestDeterministicAssembly:
-    """Test deterministic FMU generation properties."""
 
     def test_deterministic_content(self):
         """Assembled FMU should have deterministic content for same inputs."""
@@ -239,3 +177,45 @@ class TestDeterministicAssembly:
                 n1 = sorted(z1.namelist())
                 n2 = sorted(z2.namelist())
                 assert n1 == n2
+
+
+@pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
+class TestBuildReport:
+    """VR-007: Build report verification."""
+
+    def test_report_content(self):
+        """Validate build report format and content."""
+        import tempfile
+        import os
+        import json
+
+        with tempfile.TemporaryDirectory() as d:
+            report = BuildReport(
+                spec_path="spec.toml",
+                output_path="out.fmu",
+                tool_version="0.1.0",
+                fmu_count=2,
+                variable_count=3,
+                connection_count=1,
+                algebraic_loop_count=1,
+                solver_type="fixed_step",
+                solver_step_size=0.001,
+                communication_step=0.01,
+                warnings=["Test warning"],
+                fmu_guids={"a": "{guid-a}"},
+                wrapper_variables=["inp", "out"],
+            )
+
+            report_path = os.path.join(d, "report.json")
+            write_build_report(report, report_path)
+
+            with open(report_path) as f:
+                data = json.load(f)
+
+            assert data["tool_version"] == "0.1.0"
+            assert data["fmu_count"] == 2
+            assert data["solver_type"] == "fixed_step"
+            assert data["algebraic_loop_count"] == 1
+            assert "Test warning" in data["warnings"]
+            assert data["fmu_guids"]["a"] == "{guid-a}"
+            assert "inp" in data["wrapper_variables"]
