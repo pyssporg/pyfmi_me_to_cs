@@ -195,3 +195,29 @@ def test_algebraic_loop_detection_internal(fmus_dir: str):
         scc_fmus.update(loop.fmus)
     assert "A" in scc_fmus
     assert "B" in scc_fmus
+
+
+def test_mapping_with_non_real_types(fmus_dir: str):
+    """Test mapping with Integer/Boolean/String variable types."""
+    src_path, tgt_path = _create_fmu_pair(fmus_dir)
+    spec = PackageSpec(
+        fmus={
+            "src": FmuRef(name="src", path=src_path),
+            "tgt": FmuRef(name="tgt", path=tgt_path),
+        },
+        connections=[
+            Connection(source_fmu="src", source_variable="y", target_fmu="tgt", target_variable="u"),
+        ],
+        variables=[
+            WrapperVariable(name="real_in", causality="input", type="Real", target_fmu="src", target_variable="u"),
+            WrapperVariable(name="int_param", causality="parameter", type="Integer", target_fmu="src", target_variable="u", start=42),
+            WrapperVariable(name="bool_out", causality="output", type="Boolean", source_fmu="tgt", source_variable="y"),
+        ],
+    )
+    mapping = build_mapping(spec)
+    # Find variables by name
+    vars_by_name = {v.wrapper_name: v for v in mapping.all_variables()}
+    assert vars_by_name["real_in"].variable_type == "Real"
+    assert vars_by_name["int_param"].variable_type == "Integer"
+    assert vars_by_name["int_param"].start == 42
+    assert vars_by_name["bool_out"].variable_type == "Boolean"

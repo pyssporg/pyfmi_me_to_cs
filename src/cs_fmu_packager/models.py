@@ -47,7 +47,7 @@ class WrapperVariable:
     source_variable: Optional[str] = None
     target_fmu: Optional[str] = None
     target_variable: Optional[str] = None
-    start: Optional[float] = None
+    start: Optional[float | int | bool | str] = None
     description: Optional[str] = None
     unit: Optional[str] = None
     variability: Optional[str] = None
@@ -138,7 +138,7 @@ class MappedVariable:
     """A resolved variable mapping between wrapper and internal FMU."""
 
     wrapper_name: str
-    variable_type: str  # "Real"
+    variable_type: str  # "Real", "Integer", "Boolean", "String"
     causality: str  # "input", "output", "parameter"
 
     # For inputs/parameters: target is the FMU variable to set
@@ -151,7 +151,7 @@ class MappedVariable:
     source_variable: Optional[str] = None
     source_value_reference: Optional[int] = None
 
-    start: Optional[float] = None
+    start: Optional[float | int | bool | str] = None
     description: Optional[str] = None
     unit: Optional[str] = None
 

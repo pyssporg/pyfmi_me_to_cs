@@ -128,8 +128,8 @@ def _validate_variable(
     seen_names.add(name)
 
     var_type = data.get("type", "Real")
-    if var_type != "Real":
-        errors.append(f"variables[{idx}]: type must be 'Real' (v1 constraint), got '{var_type}'")
+    if var_type not in ("Real", "Integer", "Boolean", "String"):
+        errors.append(f"variables[{idx}]: type must be 'Real', 'Integer', 'Boolean', or 'String', got '{var_type}'")
 
     causality = data.get("causality", "input")
     if causality not in ("input", "output", "parameter"):
@@ -138,8 +138,16 @@ def _validate_variable(
         )
 
     start = data.get("start")
-    if start is not None and not isinstance(start, (int, float)):
-        errors.append(f"variables[{idx}].start: must be a number")
+    if start is not None:
+        var_type = data.get("type", "Real")
+        if var_type == "Real" and not isinstance(start, (int, float)):
+            errors.append(f"variables[{idx}].start: must be a number for Real type")
+        elif var_type == "Integer" and not isinstance(start, int):
+            errors.append(f"variables[{idx}].start: must be an integer for Integer type")
+        elif var_type == "Boolean" and not isinstance(start, bool):
+            errors.append(f"variables[{idx}].start: must be a boolean for Boolean type")
+        elif var_type == "String" and not isinstance(start, str):
+            errors.append(f"variables[{idx}].start: must be a string for String type")
 
     source_var = data.get("source")
     target_var = data.get("target")
@@ -175,7 +183,7 @@ def _validate_variable(
         source_variable=src_parsed[1] if source_var and _parse_variable_ref(source_var) else None,
         target_fmu=tgt_parsed[0] if target_var and _parse_variable_ref(target_var) else None,
         target_variable=tgt_parsed[1] if target_var and _parse_variable_ref(target_var) else None,
-        start=float(start) if start is not None else None,
+        start=start,
     )
 
 

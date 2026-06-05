@@ -9,11 +9,12 @@ from __future__ import annotations
 import os
 from typing import Dict
 
-from cs_fmu_packager.codegen.cmake import generate_cmake, generate_model_description_xml
+from cs_fmu_packager.codegen.cmake import generate_cmake
 from cs_fmu_packager.codegen.fmi_interface import generate_fmi_interface_impl
 from cs_fmu_packager.codegen.fixed_point import generate_fixed_point_impl
 from cs_fmu_packager.codegen.solver import generate_solver_impl
 from cs_fmu_packager.errors import CodegenError
+from cs_fmu_packager.model_description import generate_model_description
 from cs_fmu_packager.models import MappingTable, PackageSpec
 
 
@@ -48,7 +49,7 @@ def generate_all(
         generated[cmake_path] = cmake_content
 
         # Generate modelDescription.xml
-        model_desc_content = generate_model_description_xml(mapping, spec)
+        model_desc_content = generate_model_description(spec, mapping)
         model_desc_path = os.path.join(output_dir, "modelDescription.xml")
         with open(model_desc_path, "w") as f:
             f.write(model_desc_content)

@@ -139,7 +139,7 @@ source = "a.x"
 target = "a.y"
 [[variables]]
 name = "x"
-type = "Integer"
+type = "Complex"
 causality = "input"
 [solver]
 type = "fixed_step"
@@ -151,7 +151,7 @@ communication_step = 0.001
         path = _write_spec(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
-        assert "type must be 'Real'" in str(exc.value)
+        assert "type must be" in str(exc.value) and "Complex" in str(exc.value)
 
     def test_duplicate_variable_name(self):
         """VR-005: Duplicate wrapper names → error"""
@@ -297,3 +297,103 @@ communication_step = 0.02
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "communication_step" in str(exc.value) and "equal" in str(exc.value)
+
+    def test_integer_type_accepted(self):
+        """Integer type should be accepted (IC-006)."""
+        content = """
+[fmus]
+a = { path = "/dev/null/a.fmu" }
+[[connections]]
+source = "a.x"
+target = "a.y"
+[[variables]]
+name = "x"
+type = "Integer"
+causality = "input"
+start = 42
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+[wrapper]
+communication_step = 0.001
+"""
+        path = _write_spec(content)
+        spec = parse_spec(path)
+        assert spec.variables[0].type == "Integer"
+        assert spec.variables[0].start == 42
+
+    def test_boolean_type_accepted(self):
+        """Boolean type should be accepted (IC-006)."""
+        content = """
+[fmus]
+a = { path = "/dev/null/a.fmu" }
+[[connections]]
+source = "a.x"
+target = "a.y"
+[[variables]]
+name = "x"
+type = "Boolean"
+causality = "input"
+start = true
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+[wrapper]
+communication_step = 0.001
+"""
+        path = _write_spec(content)
+        spec = parse_spec(path)
+        assert spec.variables[0].type == "Boolean"
+        assert spec.variables[0].start is True
+
+    def test_string_type_accepted(self):
+        """String type should be accepted (IC-006)."""
+        content = """
+[fmus]
+a = { path = "/dev/null/a.fmu" }
+[[connections]]
+source = "a.x"
+target = "a.y"
+[[variables]]
+name = "x"
+type = "String"
+causality = "input"
+start = "hello"
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+[wrapper]
+communication_step = 0.001
+"""
+        path = _write_spec(content)
+        spec = parse_spec(path)
+        assert spec.variables[0].type == "String"
+        assert spec.variables[0].start == "hello"
+
+    def test_invalid_start_type_for_real(self):
+        """String start for Real type should fail."""
+        content = """
+[fmus]
+a = { path = "/dev/null/a.fmu" }
+[[connections]]
+source = "a.x"
+target = "a.y"
+[[variables]]
+name = "x"
+type = "Real"
+causality = "input"
+start = "not_a_number"
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+[wrapper]
+communication_step = 0.001
+"""
+        path = _write_spec(content)
+        with pytest.raises(SpecValidationError) as exc:
+            parse_spec(path)
+        assert "start" in str(exc.value)

@@ -82,6 +82,20 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
         unit_str = f' unit="{escape(var.unit)}"' if var.unit else ""
         desc_str = f' description="{escape(var.description)}"' if var.description else ""
 
+        # Determine XML type element based on variable type
+        var_type = var.variable_type or "Real"
+        if var_type == "Integer":
+            type_elem = f"<Integer{start_str} />"
+        elif var_type == "Boolean":
+            start_b = ""
+            if var.start is not None:
+                start_b = f' start="{"true" if var.start else "false"}"'
+            type_elem = f"<Boolean{start_b} />"
+        elif var_type == "String":
+            type_elem = f"<String{start_str} />"
+        else:
+            type_elem = f"<Real{start_str}{unit_str} />"
+
         elem = f"""
       <ScalarVariable
         name="{escape(var.wrapper_name)}"
@@ -89,7 +103,7 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
         causality="{var.causality}"
         variability="{_variability_for_causality(var.causality)}"{desc_str}
       >
-        <Real{start_str}{unit_str} />
+        {type_elem}
       </ScalarVariable>"""
         var_elements.append(elem)
         var_index += 1
