@@ -3,3 +3,8 @@
 .opencode/
 
 opencode.json
+
+
+*egg-info/
+
+__pycache__/

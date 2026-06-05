@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs-fmu-packager"
+version = "0.1.0"
+description = "Package FMI 2.0 Model Exchange FMUs into a single Co-Simulation FMU"
+readme = "cs-fmu-packager-project/README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "toml>=0.10",
+    "Jinja2>=3.0",
+]
+
+[project.scripts]
+cs-fmu-packager = "cs_fmu_packager.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"cs_fmu_packager" = ["c_templates/*.jinja"]

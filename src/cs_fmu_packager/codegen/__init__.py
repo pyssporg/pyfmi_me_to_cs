@@ -1,0 +1,1 @@
+"""Code generation for C wrapper source, CMake, and vcpkg integration."""

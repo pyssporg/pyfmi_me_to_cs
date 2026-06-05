@@ -1,0 +1,8 @@
+{
+  "name": "cs-fmu-packager",
+  "version": "0.1.0",
+  "dependencies": [
+    "sundials"
+  ],
+  "builtin-baseline": "7ab0a18897c59c58fccb38c7ba16d2deb9a02914"
+}

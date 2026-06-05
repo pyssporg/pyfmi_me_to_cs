@@ -1,0 +1,39 @@
+cmake_minimum_required(VERSION 3.22)
+project({{ identifier }}_wrapper LANGUAGES C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Find SUNDIALS (via vcpkg)
+find_package(SUNDIALS REQUIRED COMPONENTS arkode nvecserial)
+
+# Source files
+set(SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/fmi2_interface.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/solver_integration.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixed_point_iteration.c
+)
+
+# Build shared library
+add_library({{ identifier }} SHARED ${SOURCES})
+
+target_include_directories({{ identifier }} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${SUNDIALS_INCLUDE_DIRS}
+)
+
+target_link_libraries({{ identifier }} PRIVATE
+    SUNDIALS::arkode
+    SUNDIALS::nvecserial
+)
+
+# Output to binaries/linux64/
+set_target_properties({{ identifier }} PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/binaries/linux64"
+    PREFIX ""
+)
+
+if(NOT UNIX)
+    message(FATAL_ERROR "Only Linux is supported (v1 constraint)")
+endif()
