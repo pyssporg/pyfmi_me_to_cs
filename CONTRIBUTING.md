@@ -55,7 +55,7 @@ A quick overview of key directories and files:
 | `src/cs_fmu_packager/cli.py` | CLI entry point (Click command) |
 | `src/cs_fmu_packager/builder.py` | CMake build orchestration |
 | `src/cs_fmu_packager/mapper.py` | Spec-to-FMU variable mapping |
-| `src/cs_fmu_packager/codegen/` | C wrapper code generation (Jinja2) |
+| `src/cs_fmu_packager/codegen/` | C wrapper code generation (f-string) |
 | `src/cs_fmu_packager/packager.py` | Final FMU assembly (ZIP) |
 | `src/cs_fmu_packager/models.py` | Dataclass definitions |
 | `product-breakdown/` | Product breakdown structure (7 layers) |

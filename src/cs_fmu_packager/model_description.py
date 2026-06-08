@@ -41,12 +41,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _vr_for_index(index: int) -> int:
-    """Generate a deterministic value reference for a wrapper variable index."""
-    h = hashlib.md5(f"vr_{index}".encode())
-    return int(h.hexdigest()[:8], 16) % 100000
-
-
 def _variability_for_causality(causality: str) -> str:
     return {
         "parameter": "parameter",

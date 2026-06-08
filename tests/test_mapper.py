@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import os
 import tempfile
-import zipfile
 
 import pytest
 
+from tests.helpers import make_test_fmu
 from cs_fmu_packager.errors import MappingError
 from cs_fmu_packager.mapper import build_mapping
 from cs_fmu_packager.models import (
@@ -35,8 +35,7 @@ def _create_test_fmu(path: str, name: str, guid: str, vars_xml: str) -> None:
   </ModelVariables>
 </fmiModelDescription>"""
 
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("modelDescription.xml", model_desc)
+    make_test_fmu(path, model_desc)
 
 
 _INPUT_VAR = '<ScalarVariable name="u" valueReference="0" causality="input"><Real start="0.0"/></ScalarVariable>'
@@ -241,8 +240,7 @@ def test_auto_discover_variables(fmus_dir: str):
             "param1": ScalarVariable(name="param1", value_reference=2, type="Real", causality="parameter"),
             "local1": ScalarVariable(name="local1", value_reference=3, type="Real", causality="local"),
         },
-        variables_by_ref={},
-    )
+        )
     result = _auto_discover_variables({"fmu1": meta})
     # Should have 3 variables (input, output, parameter) — NOT local
     assert len(result) == 3

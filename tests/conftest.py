@@ -4,8 +4,12 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import textwrap
+from typing import Callable, Generator
 
 import pytest
+
+from tests.helpers import make_test_fmu
 
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -37,6 +41,35 @@ def fmu_fixture_path(fixtures_dir: str):
         return dst
 
     yield _load
+
+    for p in _paths:
+        if os.path.exists(p):
+            os.unlink(p)
+
+
+@pytest.fixture
+def tmp_fmu_path() -> Generator[str, None, None]:
+    """Yield a temporary .fmu path; cleaned up after the test."""
+    fd, path = tempfile.mkstemp(suffix=".fmu")
+    os.close(fd)
+    yield path
+    if os.path.exists(path):
+        os.unlink(path)
+
+
+@pytest.fixture
+def spec_file() -> Callable[[str], str]:
+    """Return a function that writes TOML content to a temp file and returns its path."""
+    _paths: list[str] = []
+
+    def _write(content: str) -> str:
+        fd, path = tempfile.mkstemp(suffix=".toml")
+        with os.fdopen(fd, "w") as f:
+            f.write(textwrap.dedent(content))
+        _paths.append(path)
+        return path
+
+    yield _write
 
     for p in _paths:
         if os.path.exists(p):

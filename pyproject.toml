@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
     "toml>=0.10",
-    "Jinja2>=3.0",
+    
     "pyssp-standard>=0.8",
 ]
 
@@ -32,7 +32,7 @@ test = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"cs_fmu_packager" = ["c_templates/*.jinja", "c_headers/*"]
+"cs_fmu_packager" = ["c_headers/*"]
 
 [tool.pytest.ini_options]
 markers = [

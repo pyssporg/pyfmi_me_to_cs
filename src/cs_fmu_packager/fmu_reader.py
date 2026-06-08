@@ -24,9 +24,14 @@ from cs_fmu_packager.models import FmuMetadata, ScalarVariable
 FMI_NS = "http://www.modelisar.com/schema/fmi2"
 
 
+def _ns_tag(tag: str, ns: Dict[str, str]) -> str:
+    """Return the FMI-namespaced tag for namespace-fallback lookups."""
+    return f"{{{ns['fmi']}}}{tag}"
+
+
 def _find_elem(root: ET.Element, tag: str, ns: Dict[str, str]) -> Optional[ET.Element]:
     """Find an element, trying with namespace first, then without."""
-    elem = root.find(f"{{{ns['fmi']}}}{tag}", ns)
+    elem = root.find(_ns_tag(tag, ns), ns)
     if elem is None:
         elem = root.find(tag)
     return elem
@@ -34,9 +39,9 @@ def _find_elem(root: ET.Element, tag: str, ns: Dict[str, str]) -> Optional[ET.El
 
 def _iter_elems(root: ET.Element, tag: str, ns: Dict[str, str]):
     """Iterate over elements matching tag, trying with namespace first."""
-    ns_tag = f"{{{ns['fmi']}}}{tag}"
+    ns_tag_str = _ns_tag(tag, ns)
     found = False
-    for elem in root.iter(ns_tag):
+    for elem in root.iter(ns_tag_str):
         found = True
         yield elem
     if not found:
@@ -135,8 +140,6 @@ def inspect_fmu(path: str) -> FmuMetadata:
 
     # Build ScalarVariable dict from pyssp_standard + valueReference lookup
     variables: Dict[str, ScalarVariable] = {}
-    variables_by_ref: Dict[int, ScalarVariable] = {}
-
     for pyssp_var in md.variables():
         name = pyssp_var.name
         vr = vr_by_name.get(name, 0)
@@ -165,7 +168,6 @@ def inspect_fmu(path: str) -> FmuMetadata:
             start=start,
         )
         variables[sv.name] = sv
-        variables_by_ref[sv.value_reference] = sv
 
     # Extract modelIdentifier from ModelExchange element
     model_identifier = me_elem.get("modelIdentifier", "")
@@ -202,7 +204,6 @@ def inspect_fmu(path: str) -> FmuMetadata:
         generation_tool=root.get("generationTool", ""),
         generation_date_and_time=root.get("generationDateAndTime", ""),
         variables=variables,
-        variables_by_ref=variables_by_ref,
         n_continuous_states=n_continuous_states,
         n_event_indicators=n_event_indicators,
         has_capabilities=has_capabilities,

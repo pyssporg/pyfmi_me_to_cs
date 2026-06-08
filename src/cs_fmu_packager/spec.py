@@ -50,9 +50,6 @@ def _validate_fmu_ref(fmu_id: str, data: Dict[str, Any], errors: List[str]) -> O
     )
 
 
-_VARIABLE_REF_RE = None  # optional compile for performance
-
-
 def _parse_variable_ref(ref: str) -> Optional[tuple]:
     """Parse '<fmu_id>.<variable_name>' syntax. Returns (fmu_id, var_name) or None."""
     if "." not in ref:
@@ -179,10 +176,10 @@ def _validate_variable(
         name=name,
         type=var_type,
         causality=causality,
-        source_fmu=src_parsed[0] if source_var and _parse_variable_ref(source_var) else None,
-        source_variable=src_parsed[1] if source_var and _parse_variable_ref(source_var) else None,
-        target_fmu=tgt_parsed[0] if target_var and _parse_variable_ref(target_var) else None,
-        target_variable=tgt_parsed[1] if target_var and _parse_variable_ref(target_var) else None,
+        source_fmu=src_parsed[0] if source_var and src_parsed else None,
+        source_variable=src_parsed[1] if source_var and src_parsed else None,
+        target_fmu=tgt_parsed[0] if target_var and tgt_parsed else None,
+        target_variable=tgt_parsed[1] if target_var and tgt_parsed else None,
         start=start,
     )
 

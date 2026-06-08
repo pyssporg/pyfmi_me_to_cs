@@ -207,6 +207,54 @@ class TestCHeadersResolution:
             _resolve_c_headers_dir(str(tmp_path / "nonexistent"))
 
 
+@pytest.fixture
+def full_type_mapping() -> MappingTable:
+    from cs_fmu_packager.models import (
+        FmuMetadata, ScalarVariable, MappedVariable, MappingTable, PackageSpec, SolverConfig, WrapperConfig,
+    )
+    variables = {
+        'u_r': ScalarVariable(name='u_r', value_reference=0, type='Real', causality='input'),
+        'u_i': ScalarVariable(name='u_i', value_reference=1, type='Integer', causality='input'),
+        'u_b': ScalarVariable(name='u_b', value_reference=2, type='Boolean', causality='input'),
+        'u_s': ScalarVariable(name='u_s', value_reference=3, type='String', causality='input'),
+        'y_r': ScalarVariable(name='y_r', value_reference=10, type='Real', causality='output'),
+        'y_i': ScalarVariable(name='y_i', value_reference=11, type='Integer', causality='output'),
+        'y_b': ScalarVariable(name='y_b', value_reference=12, type='Boolean', causality='output'),
+        'y_s': ScalarVariable(name='y_s', value_reference=13, type='String', causality='output'),
+        'p_r': ScalarVariable(name='p_r', value_reference=20, type='Real', causality='parameter'),
+        'p_i': ScalarVariable(name='p_i', value_reference=21, type='Integer', causality='parameter'),
+        'p_b': ScalarVariable(name='p_b', value_reference=22, type='Boolean', causality='parameter'),
+        'p_s': ScalarVariable(name='p_s', value_reference=23, type='String', causality='parameter'),
+    }
+    src_fmu = FmuMetadata(fmi_version='2.0', guid='{src-guid}', model_name='SrcFMU',
+                          model_identifier='src_model', variables=variables)
+    tgt_fmu = FmuMetadata(fmi_version='2.0', guid='{tgt-guid}', model_name='TgtFMU',
+                          model_identifier='tgt_model', variables={})
+    mapping = MappingTable(
+        fmus={'src': src_fmu, 'tgt': tgt_fmu},
+        wrapper_inputs=[
+            MappedVariable(wrapper_name='in_r', variable_type='Real', causality='input', target_fmu='src', target_variable='u_r', target_value_reference=0),
+            MappedVariable(wrapper_name='in_i', variable_type='Integer', causality='input', target_fmu='src', target_variable='u_i', target_value_reference=1),
+            MappedVariable(wrapper_name='in_b', variable_type='Boolean', causality='input', target_fmu='src', target_variable='u_b', target_value_reference=2),
+            MappedVariable(wrapper_name='in_s', variable_type='String', causality='input', target_fmu='src', target_variable='u_s', target_value_reference=3),
+        ],
+        wrapper_outputs=[
+            MappedVariable(wrapper_name='out_r', variable_type='Real', causality='output', source_fmu='src', source_variable='y_r', source_value_reference=10),
+            MappedVariable(wrapper_name='out_i', variable_type='Integer', causality='output', source_fmu='src', source_variable='y_i', source_value_reference=11),
+            MappedVariable(wrapper_name='out_b', variable_type='Boolean', causality='output', source_fmu='src', source_variable='y_b', source_value_reference=12),
+            MappedVariable(wrapper_name='out_s', variable_type='String', causality='output', source_fmu='src', source_variable='y_s', source_value_reference=13),
+        ],
+        wrapper_parameters=[
+            MappedVariable(wrapper_name='param_r', variable_type='Real', causality='parameter', target_fmu='src', target_variable='p_r', target_value_reference=20),
+            MappedVariable(wrapper_name='param_i', variable_type='Integer', causality='parameter', target_fmu='src', target_variable='p_i', target_value_reference=21, start=99),
+            MappedVariable(wrapper_name='param_b', variable_type='Boolean', causality='parameter', target_fmu='src', target_variable='p_b', target_value_reference=22, start=True),
+            MappedVariable(wrapper_name='param_s', variable_type='String', causality='parameter', target_fmu='src', target_variable='p_s', target_value_reference=23, start='default'),
+        ],
+        connections=[],
+    )
+    return mapping
+
+
 class TestFmiInterfaceCodegen:
     """Tests for fmi2_interface.c generation."""
 
@@ -218,3 +266,15 @@ class TestFmiInterfaceCodegen:
         # Should contain the resolved model identifier paths
         assert "src_model.so" in content
         assert "tgt_model.so" in content
+
+    def test_generated_output_unchanged(self, sample_spec, full_type_mapping):
+        """IMP-020/IMP-021: Generated C output must remain byte-identical."""
+        import pathlib
+        from cs_fmu_packager.codegen.fmi_interface import generate_fmi_interface_impl
+        golden_path = pathlib.Path(__file__).parent / "golden" / "fmi2_interface_test_fmu.c"
+        content = generate_fmi_interface_impl(sample_spec, full_type_mapping)
+        assert content == golden_path.read_text(), (
+            "Generated C output changed. "
+            "If the change is intentional, regenerate the golden file:\n"
+            f"  {golden_path}\n"
+        )

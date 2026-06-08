@@ -1,20 +1,17 @@
 """Tests for FMU inspection."""
 from __future__ import annotations
 
-import os
-import tempfile
 import zipfile
 
 import pytest
 
+from tests.helpers import make_test_fmu
 from cs_fmu_packager.errors import FmuInspectionError
 from cs_fmu_packager.fmu_reader import inspect_fmu
 from cs_fmu_packager.models import FmuMetadata
 
 
-def _create_minimal_me_fmu(path: str) -> None:
-    """Create a minimal FMI 2.0 Model Exchange FMU for testing."""
-    model_desc = """<?xml version="1.0" encoding="UTF-8"?>
+MINIMAL_ME_MODEL_DESC = """<?xml version="1.0" encoding="UTF-8"?>
 <fmiModelDescription
   fmiVersion="2.0"
   modelName="TestFMU"
@@ -65,18 +62,13 @@ def _create_minimal_me_fmu(path: str) -> None:
   </ModelStructure>
 </fmiModelDescription>"""
 
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("modelDescription.xml", model_desc)
-
 
 class TestFmuInspection:
-    def test_inspect_valid_fmu(self):
+    def test_inspect_valid_fmu(self, tmp_fmu_path):
         """Test basic FMU inspection."""
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        os.close(fd)
-        _create_minimal_me_fmu(path)
+        make_test_fmu(tmp_fmu_path, MINIMAL_ME_MODEL_DESC)
 
-        meta = inspect_fmu(path)
+        meta = inspect_fmu(tmp_fmu_path)
         assert meta.fmi_version == "2.0"
         assert meta.model_name == "TestFMU"
         assert meta.model_identifier == "TestFMU"
@@ -93,81 +85,60 @@ class TestFmuInspection:
         assert "x" in meta.variables
         assert meta.variables["x"].causality == "local"
 
-        os.unlink(path)
-
-    def test_inspect_fmu_model_identifier(self):
+    def test_inspect_fmu_model_identifier(self, tmp_fmu_path):
         """FmuMetadata should contain modelIdentifier parsed from XML."""
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        os.close(fd)
-        _create_minimal_me_fmu(path)
-        meta = inspect_fmu(path)
+        make_test_fmu(tmp_fmu_path, MINIMAL_ME_MODEL_DESC)
+        meta = inspect_fmu(tmp_fmu_path)
         assert meta.model_identifier == "TestFMU"
-        os.unlink(path)
 
     def test_inspect_nonexistent_fmu(self):
         with pytest.raises(FmuInspectionError) as exc:
             inspect_fmu("/nonexistent/path.fmu")
         assert "not found" in str(exc.value)
 
-    def test_inspect_not_a_zip(self):
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        with os.fdopen(fd, "w") as f:
+    def test_inspect_not_a_zip(self, tmp_fmu_path):
+        with open(tmp_fmu_path, "w") as f:
             f.write("not a zip file")
         with pytest.raises(FmuInspectionError) as exc:
-            inspect_fmu(path)
+            inspect_fmu(tmp_fmu_path)
         assert "valid ZIP" in str(exc.value)
-        os.unlink(path)
 
-    def test_inspect_missing_model_desc(self):
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        os.close(fd)
-        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+    def test_inspect_missing_model_desc(self, tmp_fmu_path):
+        with zipfile.ZipFile(tmp_fmu_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("not_modelDescription.xml", "garbage")
 
         with pytest.raises(FmuInspectionError) as exc:
-            inspect_fmu(path)
+            inspect_fmu(tmp_fmu_path)
         assert "missing modelDescription.xml" in str(exc.value)
-        os.unlink(path)
 
-    def test_inspect_wrong_fmi_version(self):
+    def test_inspect_wrong_fmi_version(self, tmp_fmu_path):
         model_desc_wrong = """<?xml version="1.0" encoding="UTF-8"?>
 <fmiModelDescription fmiVersion="1.0" modelName="OldFMU" guid="abc">
   <ModelExchange modelIdentifier="OldFMU" />
 </fmiModelDescription>"""
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        os.close(fd)
-        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("modelDescription.xml", model_desc_wrong)
+        make_test_fmu(tmp_fmu_path, model_desc_wrong)
         with pytest.raises(FmuInspectionError) as exc:
-            inspect_fmu(path)
+            inspect_fmu(tmp_fmu_path)
         assert "unsupported FMI version" in str(exc.value)
-        os.unlink(path)
 
-    def test_inspect_not_me_fmu(self):
+    def test_inspect_not_me_fmu(self, tmp_fmu_path):
         """CS-only FMU should be rejected."""
         model_desc_cs = """<?xml version="1.0" encoding="UTF-8"?>
 <fmiModelDescription fmiVersion="2.0" modelName="CSFMU" guid="abc">
   <CoSimulation modelIdentifier="CSFMU" />
 </fmiModelDescription>"""
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        os.close(fd)
-        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("modelDescription.xml", model_desc_cs)
+        make_test_fmu(tmp_fmu_path, model_desc_cs)
         with pytest.raises(FmuInspectionError) as exc:
-            inspect_fmu(path)
+            inspect_fmu(tmp_fmu_path)
         assert "not a ModelExchange" in str(exc.value)
-        os.unlink(path)
 
-    def test_inspect_fmu_returns_variable_details(self):
+    def test_inspect_fmu_returns_variable_details(self, tmp_fmu_path):
         """inspect_fmu should return variables with correct metadata."""
-        fd, path = tempfile.mkstemp(suffix=".fmu")
-        os.close(fd)
-        _create_minimal_me_fmu(path)
-        meta = inspect_fmu(path)
+        make_test_fmu(tmp_fmu_path, MINIMAL_ME_MODEL_DESC)
+        meta = inspect_fmu(tmp_fmu_path)
         assert len(meta.variables) > 0
         # Check that at least one variable has a value_reference
         for name, var in meta.variables.items():
             assert var.value_reference >= 0
             assert var.type in ("Real", "Integer", "Boolean", "String", "Enumeration")
             assert var.causality in ("input", "output", "parameter", "local", "independent")
-        os.unlink(path)

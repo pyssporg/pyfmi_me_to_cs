@@ -6,7 +6,6 @@ parsed FMU metadata, and mapping tables used throughout the packaging pipeline.
 
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -123,7 +122,6 @@ class FmuMetadata:
     generation_tool: str = ""
     generation_date_and_time: str = ""
     variables: Dict[str, ScalarVariable] = field(default_factory=dict)
-    variables_by_ref: Dict[int, ScalarVariable] = field(default_factory=dict)
     n_continuous_states: int = 0
     n_event_indicators: int = 0
     has_capabilities: bool = False

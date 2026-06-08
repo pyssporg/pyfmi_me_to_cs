@@ -66,24 +66,39 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
     num_params = len(mapping.wrapper_parameters)
     num_connections = len(mapping.connections)
 
-    # Count typed variables
-    def _count_type(vars_list: list[MappedVariable], causality: str, vtype: str) -> int:
-        return len(
-            [v for v in vars_list if v.causality == causality and v.variable_type == vtype]
-        )
+    # Type×role combinations for consolidation (IMP-020, IMP-021)
+    _type_role_combos = [
+        ("real", "Real",   "input",    "input",  mapping.wrapper_inputs),
+        ("int",  "Integer","input",    "input",  mapping.wrapper_inputs),
+        ("bool", "Boolean","input",    "input",  mapping.wrapper_inputs),
+        ("str",  "String", "input",    "input",  mapping.wrapper_inputs),
+        ("real", "Real",   "output",   "output", mapping.wrapper_outputs),
+        ("int",  "Integer","output",   "output", mapping.wrapper_outputs),
+        ("bool", "Boolean","output",   "output", mapping.wrapper_outputs),
+        ("str",  "String", "output",   "output", mapping.wrapper_outputs),
+        ("real", "Real",   "parameter","param",  mapping.wrapper_parameters),
+        ("int",  "Integer","parameter","param",  mapping.wrapper_parameters),
+        ("bool", "Boolean","parameter","param",  mapping.wrapper_parameters),
+        ("str",  "String", "parameter","param",  mapping.wrapper_parameters),
+    ]
 
-    all_real_inputs = _count_type(mapping.wrapper_inputs, "input", "Real")
-    all_int_inputs = _count_type(mapping.wrapper_inputs, "input", "Integer")
-    all_bool_inputs = _count_type(mapping.wrapper_inputs, "input", "Boolean")
-    all_str_inputs = _count_type(mapping.wrapper_inputs, "input", "String")
-    all_real_outputs = _count_type(mapping.wrapper_outputs, "output", "Real")
-    all_int_outputs = _count_type(mapping.wrapper_outputs, "output", "Integer")
-    all_bool_outputs = _count_type(mapping.wrapper_outputs, "output", "Boolean")
-    all_str_outputs = _count_type(mapping.wrapper_outputs, "output", "String")
-    all_real_params = _count_type(mapping.wrapper_parameters, "parameter", "Real")
-    all_int_params = _count_type(mapping.wrapper_parameters, "parameter", "Integer")
-    all_bool_params = _count_type(mapping.wrapper_parameters, "parameter", "Boolean")
-    all_str_params = _count_type(mapping.wrapper_parameters, "parameter", "String")
+    _counts = {}
+    for ts, vt, caus, rs, vl in _type_role_combos:
+        _counts[f"all_{ts}_{rs}s"] = len(
+            [v for v in vl if v.causality == caus and v.variable_type == vt]
+        )
+    all_real_inputs  = _counts["all_real_inputs"]
+    all_int_inputs   = _counts["all_int_inputs"]
+    all_bool_inputs  = _counts["all_bool_inputs"]
+    all_str_inputs   = _counts["all_str_inputs"]
+    all_real_outputs = _counts["all_real_outputs"]
+    all_int_outputs  = _counts["all_int_outputs"]
+    all_bool_outputs = _counts["all_bool_outputs"]
+    all_str_outputs  = _counts["all_str_outputs"]
+    all_real_params  = _counts["all_real_params"]
+    all_int_params   = _counts["all_int_params"]
+    all_bool_params  = _counts["all_bool_params"]
+    all_str_params   = _counts["all_str_params"]
 
     # Build FMU index names for C code
     fmu_idx_defs = []
@@ -210,78 +225,26 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
     fmu_load_code = "\n".join(fmu_load_blocks)
 
     # Generate variable array allocation and population code
-    # Real inputs
-    real_input_init = _variable_mapping_init_code(
-        "inst->real_inputs",
-        [v for v in mapping.wrapper_inputs if v.variable_type == "Real"],
-        "        ",
-    )
-    # Integer inputs
-    int_input_init = _variable_mapping_init_code(
-        "inst->int_inputs",
-        [v for v in mapping.wrapper_inputs if v.variable_type == "Integer"],
-        "        ",
-    )
-    # Boolean inputs
-    bool_input_init = _variable_mapping_init_code(
-        "inst->bool_inputs",
-        [v for v in mapping.wrapper_inputs if v.variable_type == "Boolean"],
-        "        ",
-    )
-    # String inputs
-    str_input_init = _variable_mapping_init_code(
-        "inst->string_inputs",
-        [v for v in mapping.wrapper_inputs if v.variable_type == "String"],
-        "        ",
-    )
-    # Real outputs
-    real_output_init = _variable_mapping_init_code(
-        "inst->real_outputs",
-        [v for v in mapping.wrapper_outputs if v.variable_type == "Real"],
-        "        ",
-    )
-    # Integer outputs
-    int_output_init = _variable_mapping_init_code(
-        "inst->int_outputs",
-        [v for v in mapping.wrapper_outputs if v.variable_type == "Integer"],
-        "        ",
-    )
-    # Boolean outputs
-    bool_output_init = _variable_mapping_init_code(
-        "inst->bool_outputs",
-        [v for v in mapping.wrapper_outputs if v.variable_type == "Boolean"],
-        "        ",
-    )
-    # String outputs
-    str_output_init = _variable_mapping_init_code(
-        "inst->string_outputs",
-        [v for v in mapping.wrapper_outputs if v.variable_type == "String"],
-        "        ",
-    )
-    # Real params
-    real_param_init = _variable_mapping_init_code(
-        "inst->real_params",
-        [v for v in mapping.wrapper_parameters if v.variable_type == "Real"],
-        "        ",
-    )
-    # Integer params
-    int_param_init = _variable_mapping_init_code(
-        "inst->int_params",
-        [v for v in mapping.wrapper_parameters if v.variable_type == "Integer"],
-        "        ",
-    )
-    # Boolean params
-    bool_param_init = _variable_mapping_init_code(
-        "inst->bool_params",
-        [v for v in mapping.wrapper_parameters if v.variable_type == "Boolean"],
-        "        ",
-    )
-    # String params
-    str_param_init = _variable_mapping_init_code(
-        "inst->string_params",
-        [v for v in mapping.wrapper_parameters if v.variable_type == "String"],
-        "        ",
-    )
+    _c_field_name = {"real": "real", "int": "int", "bool": "bool", "str": "string"}
+    _init_code = {}
+    for ts, vt, caus, rs, vl in _type_role_combos:
+        _init_code[f"{ts}_{rs}_init"] = _variable_mapping_init_code(
+            f"inst->{_c_field_name[ts]}_{rs}s",
+            [v for v in vl if v.variable_type == vt],
+            "        ",
+        )
+    real_input_init  = _init_code["real_input_init"]
+    int_input_init   = _init_code["int_input_init"]
+    bool_input_init  = _init_code["bool_input_init"]
+    str_input_init   = _init_code["str_input_init"]
+    real_output_init = _init_code["real_output_init"]
+    int_output_init  = _init_code["int_output_init"]
+    bool_output_init = _init_code["bool_output_init"]
+    str_output_init  = _init_code["str_output_init"]
+    real_param_init  = _init_code["real_param_init"]
+    int_param_init   = _init_code["int_param_init"]
+    bool_param_init  = _init_code["bool_param_init"]
+    str_param_init   = _init_code["str_param_init"]
 
     # Connections init
     connections_init_lines = []

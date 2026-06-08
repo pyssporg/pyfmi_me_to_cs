@@ -1,22 +1,10 @@
 """Tests for spec parsing and validation."""
 from __future__ import annotations
 
-import os
-import tempfile
-import textwrap
-
 import pytest
 
 from cs_fmu_packager.errors import SpecValidationError
 from cs_fmu_packager.spec import parse_spec
-
-
-def _write_spec(content: str) -> str:
-    """Write a TOML spec to a temp file and return the path."""
-    fd, path = tempfile.mkstemp(suffix=".toml")
-    with os.fdopen(fd, "w") as f:
-        f.write(textwrap.dedent(content))
-    return path
 
 
 def _valid_spec() -> str:
@@ -59,8 +47,8 @@ communication_step = 0.01
 
 class TestSpecParsing:
     """VR-004: Invalid variable reference → error"""
-    def test_valid_spec_parses(self):
-        path = _write_spec(_valid_spec())
+    def test_valid_spec_parses(self, spec_file):
+        path = spec_file(_valid_spec())
         spec = parse_spec(path)
         assert spec.metadata["identifier"] == "test_fmu"
         assert len(spec.fmus) == 2
@@ -69,7 +57,7 @@ class TestSpecParsing:
         assert spec.solver.step_size == 0.001
         assert spec.wrapper.communication_step == 0.01
 
-    def test_missing_fmus_section(self):
+    def test_missing_fmus_section(self, spec_file):
         content = """
 [[connections]]
 [[variables]]
@@ -80,12 +68,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "Missing required section" in str(exc.value)
 
-    def test_missing_connections_section(self):
+    def test_missing_connections_section(self, spec_file):
         content = """
 [fmus]
 a = { path = "/dev/null/a.fmu" }
@@ -99,12 +87,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "Missing required section" in str(exc.value)
 
-    def test_invalid_fmi_version(self):
+    def test_invalid_fmi_version(self, spec_file):
         """VR-004: Invalid FMU metadata → error"""
         content = """
 [fmus]
@@ -124,12 +112,12 @@ communication_step = 0.01
 [wrapper]
 communication_step = 0.01
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "fmi_version" in str(exc.value)
 
-    def test_invalid_variable_type(self):
+    def test_invalid_variable_type(self, spec_file):
         """VR-004: Invalid variable type → error"""
         content = """
 [fmus]
@@ -148,12 +136,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "type must be" in str(exc.value) and "Complex" in str(exc.value)
 
-    def test_duplicate_variable_name(self):
+    def test_duplicate_variable_name(self, spec_file):
         """VR-005: Duplicate wrapper names → error"""
         content = """
 [fmus]
@@ -176,12 +164,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "duplicate variable name" in str(exc.value)
 
-    def test_step_size_greater_than_comm_step(self):
+    def test_step_size_greater_than_comm_step(self, spec_file):
         content = """
 [fmus]
 a = { path = "/dev/null/a.fmu" }
@@ -199,12 +187,12 @@ communication_step = 0.01
 [wrapper]
 communication_step = 0.01
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "step_size" in str(exc.value)
 
-    def test_invalid_fmu_ref_format(self):
+    def test_invalid_fmu_ref_format(self, spec_file):
         """VR-004: Invalid connection syntax"""
         content = """
 [fmus]
@@ -223,12 +211,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "invalid format" in str(exc.value)
 
-    def test_unknown_fmu_in_connection(self):
+    def test_unknown_fmu_in_connection(self, spec_file):
         content = """
 [fmus]
 a = { path = "/dev/null/a.fmu" }
@@ -246,12 +234,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "not defined" in str(exc.value)
 
-    def test_algebraic_loop_config(self):
+    def test_algebraic_loop_config(self, spec_file):
         content = """
 [fmus]
 a = { path = "/dev/null/a.fmu" }
@@ -270,12 +258,12 @@ algebraic_loop = { max_iterations = 50, tolerance = 1e-8 }
 [wrapper]
 communication_step = 0.01
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         spec = parse_spec(path)
         assert spec.solver.algebraic_loop.max_iterations == 50
         assert spec.solver.algebraic_loop.tolerance == 1e-8
 
-    def test_comm_step_mismatch(self):
+    def test_comm_step_mismatch(self, spec_file):
         content = """
 [fmus]
 a = { path = "/dev/null/a.fmu" }
@@ -293,12 +281,12 @@ communication_step = 0.01
 [wrapper]
 communication_step = 0.02
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "communication_step" in str(exc.value) and "equal" in str(exc.value)
 
-    def test_spec_without_variables_section(self):
+    def test_spec_without_variables_section(self, spec_file):
         """Spec without [[variables]] should parse successfully (IMP-013)."""
         content = """
 [metadata]
@@ -320,11 +308,11 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         spec = parse_spec(path)
         assert spec.variables == []  # Should be empty list, not error
 
-    def test_integer_type_accepted(self):
+    def test_integer_type_accepted(self, spec_file):
         """Integer type should be accepted (IC-006)."""
         content = """
 [fmus]
@@ -344,12 +332,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         spec = parse_spec(path)
         assert spec.variables[0].type == "Integer"
         assert spec.variables[0].start == 42
 
-    def test_boolean_type_accepted(self):
+    def test_boolean_type_accepted(self, spec_file):
         """Boolean type should be accepted (IC-006)."""
         content = """
 [fmus]
@@ -369,12 +357,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         spec = parse_spec(path)
         assert spec.variables[0].type == "Boolean"
         assert spec.variables[0].start is True
 
-    def test_string_type_accepted(self):
+    def test_string_type_accepted(self, spec_file):
         """String type should be accepted (IC-006)."""
         content = """
 [fmus]
@@ -394,12 +382,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         spec = parse_spec(path)
         assert spec.variables[0].type == "String"
         assert spec.variables[0].start == "hello"
 
-    def test_invalid_start_type_for_real(self):
+    def test_invalid_start_type_for_real(self, spec_file):
         """String start for Real type should fail."""
         content = """
 [fmus]
@@ -419,12 +407,12 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "start" in str(exc.value)
 
-    def test_spec_with_variables_section_still_works(self):
+    def test_spec_with_variables_section_still_works(self, spec_file):
         """Spec with [[variables]] should still parse correctly (backward compat)."""
         content = """
 [metadata]
@@ -451,7 +439,7 @@ communication_step = 0.001
 [wrapper]
 communication_step = 0.001
 """
-        path = _write_spec(content)
+        path = spec_file(content)
         spec = parse_spec(path)
         assert len(spec.variables) == 1
         assert spec.variables[0].name == "my_input"

@@ -9,7 +9,6 @@ See --help for full option details.
 from __future__ import annotations
 
 import importlib.resources as resources
-import json
 import os
 import sys
 import tempfile
