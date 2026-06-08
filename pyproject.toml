@@ -23,9 +23,18 @@ cs-fmu-packager = "cs_fmu_packager.cli:main"
 dev = [
     "pytest>=7.0",
 ]
+test = [
+    "pytest>=7.0",
+    "fmpy>=0.3",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "cs_fmu_packager" = ["c_templates/*.jinja", "c_headers/*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "verification: behavioral verification tests requiring OMC and fmpy",
+]

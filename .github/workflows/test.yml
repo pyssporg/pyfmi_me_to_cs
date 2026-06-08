@@ -42,7 +42,16 @@ jobs:
           "$VCPKG_ROOT/vcpkg" install sundials
 
       - name: Install Python package
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,test]"
 
-      - name: Run tests
-        run: pytest -v
+      - name: Install OpenModelica
+        run: sudo apt-get update && sudo apt-get install -y omc
+
+      - name: Generate fixture FMUs
+        run: make generate-fixtures
+
+      - name: Run unit and integration tests
+        run: pytest -v -m "not verification" --ignore=tests/test_cs_behavior_verification.py
+
+      - name: Run behavioral verification tests
+        run: pytest -v -m "verification" tests/test_cs_behavior_verification.py

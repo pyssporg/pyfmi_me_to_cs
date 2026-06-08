@@ -24,3 +24,54 @@ Three-tier testing strategy:
 - Build tests are conditional (`@pytest.mark.skipif`) on `VCPKG_ROOT` being set to avoid CI failures on non-Linux or non-vcpkg environments.
 - Spec validation tests use temporary TOML files written to disk, then parsed through the standard API.
 - Mapper tests create temporary FMU files via `tempfile.mkstemp` and clean up via `shutil.rmtree`.
+
+## Modelica-based Fixture Generation and Behavioral Verification
+
+### Motivation
+
+The original fixture generation (`generate_test_fmus.py`) hand-crafted `modelDescription.xml` via ElementTree string interpolation. This approach was:
+- **Fragile** — every new test FMU required manual XML with correct FMI 2.0 schema elements, variable references, and dependency declarations.
+- **Non-behavioral** — the hand-crafted XML described structure but never validated equation-system correctness.
+- **Non-composable** — testing interconnected systems required manually managing metadata consistency across multiple FMUs.
+
+The project's core ME→CS conversion pipeline had no automated behavioral validation: the test suite verified structural and metadata correctness but could not catch semantic errors in the generated solver, variable mapping, or FMU assembly.
+
+### Two-tier approach
+
+**Tier 1 — Modelica-based ME FMU fixture generation:**
+- Modelica source files (`.mo`) live in `tests/fixtures/modelica/`.
+- `generate_test_fmus.py` is rewritten to call the OpenModelica compiler (`omc`) via `subprocess`, producing FMI 2.0 Model Exchange FMUs.
+- A `Makefile` target (`make generate-fixtures`) enables one-command regeneration.
+- Existing tests that consume fixture FMUs (`fmu_fixture_path` in `conftest.py`) continue to work unchanged.
+
+**Tier 2 — Dual-export behavioral verification:**
+- Compound Modelica models (e.g., `IntegratorWithGain`) are exported as **both** ME and CS FMUs via OMC.
+- The project's `cs-fmu-packager` converts the ME FMU into a second CS FMU (the artifact under test).
+- `fmpy.simulate_fmu()` runs both CS FMUs with identical parameters.
+- Output trajectories are compared using `numpy.allclose(rtol=1e-4, atol=1e-6)`.
+- The comparison is implemented in `tests/fixtures/cs_verification.py` (the `verify_cs_behavior()` helper).
+- Three tests in `tests/test_cs_behavior_verification.py` exercise the verification loop: (1) nominal match, (2) tolerance boundary, (3) corrupted-FMU detection.
+
+### When to regenerate fixtures
+
+- After changing any `.mo` file in `tests/fixtures/modelica/`.
+- After upgrading the OMC version (regenerate and verify no behavioral regression).
+- Before running the behavioral verification tests if fixture FMUs are stale.
+
+### How to add new test models
+
+1. Write a Modelica `.mo` file in `tests/fixtures/modelica/`.
+2. Add an entry to the `_MODELS` dictionary in `generate_test_fmus.py`.
+3. Run `make generate-fixtures`.
+4. If the model is a compound system, it will automatically be included in CS export (when `--cs` is used).
+
+### Dependencies
+
+| Dependency | Purpose | Installation |
+| --- | --- | --- |
+| `omc` (OpenModelica compiler) | Compile `.mo` → FMU (ME and CS) | `apt install omc` (Ubuntu), `brew install openmodelica` (macOS) |
+| `fmpy>=0.3` | Pure-Python FMI 2.0 CS runtime for simulation comparison | `pip install fmpy` (included in `[test]` optional-deps) |
+| `numpy` | Array comparison via `allclose` | Transitive dependency of `fmpy` |
+| `pandas` | Trajectory data structure | Transitive dependency of `fmpy` |
+
+The verification tests are protected by `@pytest.mark.verification` and are skipped if either `omc` or `fmpy` are not installed.

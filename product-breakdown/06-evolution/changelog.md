@@ -20,6 +20,7 @@
 | IMP-006 | GitHub Actions CI workflow | Evolution | Completed | 2026-06-05 | `.github/workflows/test.yml` |
 | IMP-011 | Test fixture improvements   | Evolution | Completed | 2026-06-05 | `tests/conftest.py`, `tests/fixtures/` |
 | IMP-013 | Optional `[[variables]]` + pyssp-standard backend | Evolution | Completed | 2026-06-05 | `src/cs_fmu_packager/fmu_reader.py`, `src/cs_fmu_packager/spec.py`, `src/cs_fmu_packager/mapper.py`, `pyproject.toml`, `tests/` |
+| IMP-014 | Modelica-based test fixture generation and behavioral verification | Evolution | Completed | 2026-06-08 | `tests/fixtures/modelica/`, `tests/fixtures/generate_test_fmus.py`, `tests/fixtures/cs_verification.py`, `tests/test_cs_behavior_verification.py`, `Makefile`, `pyproject.toml`, `.github/workflows/test.yml`, `product-breakdown/04-verification/test-strategy.md`, `product-breakdown/06-evolution/risks.md` |
 
 ### Constraints
 

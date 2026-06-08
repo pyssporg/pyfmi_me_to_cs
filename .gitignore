@@ -4,7 +4,13 @@
 
 opencode.json
 
-
 *egg-info/
 
 __pycache__/
+
+# OMC build artifacts
+*.log
+*.libs
+*_info.json
+*_FMU.makefile
+index.html
