@@ -26,6 +26,7 @@
    ```bash
    pip install -e ".[dev]"
    ```
+   This also installs `pyssp-standard` (FMU metadata inspection library) as a transitive dependency.
 4. Verify installation:
    ```bash
    python -m cs_fmu_packager --help

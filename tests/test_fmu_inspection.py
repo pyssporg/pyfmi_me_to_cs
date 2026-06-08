@@ -79,7 +79,7 @@ class TestFmuInspection:
         meta = inspect_fmu(path)
         assert meta.fmi_version == "2.0"
         assert meta.model_name == "TestFMU"
-        assert "ModelExchange" in meta.model_types
+        assert meta.model_identifier == "TestFMU"
         assert len(meta.variables) == 3
 
         # Check specific variables
@@ -156,4 +156,18 @@ class TestFmuInspection:
         with pytest.raises(FmuInspectionError) as exc:
             inspect_fmu(path)
         assert "not a ModelExchange" in str(exc.value)
+        os.unlink(path)
+
+    def test_inspect_fmu_returns_variable_details(self):
+        """inspect_fmu should return variables with correct metadata."""
+        fd, path = tempfile.mkstemp(suffix=".fmu")
+        os.close(fd)
+        _create_minimal_me_fmu(path)
+        meta = inspect_fmu(path)
+        assert len(meta.variables) > 0
+        # Check that at least one variable has a value_reference
+        for name, var in meta.variables.items():
+            assert var.value_reference >= 0
+            assert var.type in ("Real", "Integer", "Boolean", "String", "Enumeration")
+            assert var.causality in ("input", "output", "parameter", "local", "independent")
         os.unlink(path)

@@ -178,6 +178,39 @@ class TestAssemblyWithoutBuild:
                 n2 = sorted(z2.namelist())
                 assert n1 == n2
 
+    def test_auto_discovery_without_variables_section(self):
+        """End-to-end: spec without [[variables]] should auto-discover variables."""
+        # Create a spec without [[variables]]
+        spec_str = """
+[metadata]
+identifier = "auto_discovery_test"
+
+[fmus]
+src = { path = "src.fmu" }
+tgt = { path = "tgt.fmu" }
+
+[[connections]]
+source = "src.out"
+target = "tgt.in"
+
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+
+[wrapper]
+communication_step = 0.001
+"""
+        fd, path = tempfile.mkstemp(suffix=".toml")
+        os.write(fd, spec_str.encode())
+        os.close(fd)
+        try:
+            from cs_fmu_packager.spec import parse_spec
+            spec = parse_spec(path)
+            assert spec.variables == [], f"Expected empty variables, got {spec.variables}"
+        finally:
+            os.unlink(path)
+
 
 @pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
 class TestBuildReport:

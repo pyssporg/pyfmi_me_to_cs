@@ -9,7 +9,7 @@ The generated Co-Simulation FMU has no runtime dependencies beyond the standard 
 | Error | Cause | Resolution |
 | --- | --- | --- |
 | Spec file not found | Invalid or missing path to `.toml` file | Verify the spec path is correct and the file exists |
-| Missing required section | TOML spec missing `[fmus]`, `[[connections]]`, `[[variables]]`, `[solver]`, or `[wrapper]` | Add the missing section to the spec |
+| Missing required section | TOML spec missing `[fmus]`, `[[connections]]`, `[solver]`, or `[wrapper]` (or `[[variables]]` if explicitly declared) | Add the missing section to the spec |
 | FMI version not 2.0 | Input FMU uses FMI 1.0 or 3.0 | Use FMI 2.0 Model Exchange FMUs |
 | Not a ModelExchange FMU | Input FMU is Co-Simulation only | Use a Model Exchange FMU for input |
 | Variable not found in FMU | Spec references a variable name that doesn't exist in the FMU's modelDescription.xml | Check variable names in the spec against the FMU's modelDescription.xml |

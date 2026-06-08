@@ -278,11 +278,10 @@ def parse_spec(path: str) -> PackageSpec:
     errors: List[str] = []
 
     # Check required sections (metadata is optional)
-    required_sections = ["fmus", "connections", "variables", "solver", "wrapper"]
+    required_sections = ["fmus", "connections", "solver", "wrapper"]
     _required_display = {
         "fmus": "[fmus]",
         "connections": "[[connections]]",
-        "variables": "[[variables]]",
         "solver": "[solver]",
         "wrapper": "[wrapper]",
     }

@@ -19,7 +19,7 @@ Package specification parsing and validation. Reads a TOML spec file, validates 
 
 ## Validation Rules
 
-- Required sections: `[fmus]`, `[[connections]]`, `[[variables]]`, `[solver]`, `[wrapper]`
+- Required sections: `[fmus]`, `[[connections]]`, `[solver]`, `[wrapper]`; `[[variables]]` is optional (auto-discovered from FMU files when absent)
 - FMU path must be present; FMI version must be `"2.0"`; kind must be `"ModelExchange"`
 - Connections use `<fmu_id>.<variable_name>` syntax
 - Variable names must be unique; causality must be `"input"`, `"output"`, or `"parameter"`

@@ -2,92 +2,58 @@
 
 Opens an FMI 2.0 Model Exchange FMU archive, validates its structure,
 and extracts all metadata from modelDescription.xml.
+
+Uses pyssp_standard for variable list discovery and lxml for metadata
+that pyssp_standard doesn't parse (valueReference, modelIdentifier,
+capabilities).
 """
 
 from __future__ import annotations
 
 import os
 import zipfile
-import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
+
+from lxml import etree as ET
+from pyssp_standard.fmu import FMU
 
 from cs_fmu_packager.errors import FmuInspectionError
 from cs_fmu_packager.models import FmuMetadata, ScalarVariable
 
-
-def _parse_scalar_variables(root: ET.Element) -> Dict[str, ScalarVariable]:
-    """Parse all ScalarVariable elements from modelDescription.xml."""
-    variables: Dict[str, ScalarVariable] = {}
-    ns = {"fmi": "http://www.modelisar.com/schema/fmi2"}
-    # Try without namespace first (some FMUs omit namespace)
-    scalar_vars = root.findall(".//ScalarVariable")
-    if not scalar_vars:
-        scalar_vars = root.findall(".//fmi:ScalarVariable", ns)
-
-    for sv in scalar_vars:
-        name = sv.get("name", "")
-        vr = int(sv.get("valueReference", 0))
-        causality = sv.get("causality", "local")
-        variability = sv.get("variability", "continuous")
-        desc = sv.get("description")
-
-        # Determine the variable type sub-element (Real, Integer, Boolean, String)
-        var_type = "Real"
-        unit = None
-        start = None
-
-        for child in sv:
-            tag = child.tag
-            if "}" in tag:
-                tag = tag.split("}", 1)[1]
-            if tag in ("Real", "Integer", "Boolean", "String"):
-                var_type = tag
-                unit = child.get("unit") or child.get("unit_") or None
-                start_str = child.get("start")
-                if start_str is not None:
-                    try:
-                        start = float(start_str)
-                    except ValueError:
-                        pass
-                break
-
-        sv_obj = ScalarVariable(
-            name=name,
-            value_reference=vr,
-            type=var_type,
-            causality=causality,
-            variability=variability,
-            description=desc,
-            unit=unit,
-            start=start,
-        )
-        variables[name] = sv_obj
-
-    return variables
+# FMI 2.0 namespace
+FMI_NS = "http://www.modelisar.com/schema/fmi2"
 
 
-def _detect_unsupported_features(root: ET.Element) -> List[str]:
+def _find_elem(root: ET.Element, tag: str, ns: Dict[str, str]) -> Optional[ET.Element]:
+    """Find an element, trying with namespace first, then without."""
+    elem = root.find(f"{{{ns['fmi']}}}{tag}", ns)
+    if elem is None:
+        elem = root.find(tag)
+    return elem
+
+
+def _iter_elems(root: ET.Element, tag: str, ns: Dict[str, str]):
+    """Iterate over elements matching tag, trying with namespace first."""
+    ns_tag = f"{{{ns['fmi']}}}{tag}"
+    found = False
+    for elem in root.iter(ns_tag):
+        found = True
+        yield elem
+    if not found:
+        for elem in root.iter(tag):
+            yield elem
+
+
+def _detect_unsupported_features(root: ET.Element, ns: Dict[str, str]) -> List[str]:
     """Detect features the wrapper does not support."""
     unsupported: List[str] = []
-    ns = {"fmi": "http://www.modelisar.com/schema/fmi2"}
-    me = root.find("fmi:ModelExchange", ns)
-    if me is None:
-        me = root.find("ModelExchange")
+    me = _find_elem(root, "ModelExchange", ns)
 
     if me is not None:
-        # Check for variable-step solver requirement
-        can_interpolate_inputs = me.get("canInterpolateInputs", "false")
-        # There's no standard flag for "requires variable-step" but we check
-        # the completed integrator step capability
-        can_handle_variable_step = me.get("completedIntegratorStepNotNeeded", "false")
-        # If the FMU does NOT support getting/setting state,
-        # we're more limited in event handling
         can_get_set_state = me.get("canGetAndSetFMUstate", "false")
         if can_get_set_state == "false":
             unsupported.append("FMU does not support get/set state")
 
-    # Check if there are any event indicators (zero-crossing signals)
-    # This would indicate event-driven behavior
     num_event_indicators = root.get("numberOfEventIndicators", "0")
     if num_event_indicators and int(num_event_indicators) > 0:
         unsupported.append(f"FMU has {num_event_indicators} event indicators (event handling limited)")
@@ -113,14 +79,15 @@ def inspect_fmu(path: str) -> FmuMetadata:
     if not path.endswith(".fmu"):
         raise FmuInspectionError(f"File is not an FMU (expected .fmu extension): {path}")
 
+    # Validate ZIP structure and extract modelDescription.xml with lxml first
+    # (pyssp_standard doesn't handle edge cases like missing modelDescription.xml
+    # or non-FMI-2.0 content gracefully)
     try:
         with zipfile.ZipFile(path, "r") as zf:
-            # Validate FMU structure
             contents = set(zf.namelist())
             if "modelDescription.xml" not in contents:
                 raise FmuInspectionError(f"FMU {path}: missing modelDescription.xml")
 
-            # Read modelDescription.xml
             with zf.open("modelDescription.xml") as f:
                 tree = ET.parse(f)
             root = tree.getroot()
@@ -129,83 +96,118 @@ def inspect_fmu(path: str) -> FmuMetadata:
     except ET.ParseError as e:
         raise FmuInspectionError(f"FMU {path}: invalid modelDescription.xml: {e}")
 
-    # Extract basic metadata
+    # Validate FMI version
     fmi_version = root.get("fmiVersion", "")
     if fmi_version != "2.0":
         raise FmuInspectionError(
             f"FMU {path}: unsupported FMI version '{fmi_version}', expected '2.0'"
         )
 
-    guid = root.get("guid", "")
-    model_name = root.get("modelName", "")
-
-    # Determine model types
-    model_types: List[str] = []
-    for child in root:
-        tag = child.tag
-        if "}" in tag:
-            tag = tag.split("}", 1)[1]
-        if tag == "ModelExchange":
-            model_types.append("ModelExchange")
-        elif tag == "CoSimulation":
-            model_types.append("CoSimulation")
-
-    if "ModelExchange" not in model_types:
-        raise FmuInspectionError(
-            f"FMU {path}: not a ModelExchange FMU (found types: {model_types})"
-        )
-
-    # Parse capability flags
-    me_elem = root.find("ModelExchange")
+    # Validate that this is a ModelExchange FMU
+    ns = {"fmi": FMI_NS}
+    me_elem = _find_elem(root, "ModelExchange", ns)
     if me_elem is None:
+        # Determine available model types for the error message
+        model_types: List[str] = []
         for child in root:
             tag = child.tag
             if "}" in tag:
                 tag = tag.split("}", 1)[1]
-            if tag == "ModelExchange":
-                me_elem = child
-                break
+            if tag in ("ModelExchange", "CoSimulation"):
+                model_types.append(tag)
+        raise FmuInspectionError(
+            f"FMU {path}: not a ModelExchange FMU (found types: {model_types})"
+        )
 
-    can_get_set_state = False
-    can_serialize = False
-    can_provide_directional = False
-    model_identifier = ""
-    if me_elem is not None:
-        model_identifier = me_elem.get("modelIdentifier", "")
-        can_get_set_state = me_elem.get("canGetAndSetFMUstate", "false").lower() == "true"
-        can_serialize = me_elem.get("canSerializeFMUstate", "false").lower() == "true"
-        can_provide_directional = me_elem.get("providesDirectionalDerivatives", "false").lower() == "true"
+    # Use pyssp_standard for variable list discovery
+    try:
+        with FMU(path, mode='r') as fmu:
+            md = fmu.model_description
+    except Exception as e:
+        raise FmuInspectionError(f"Failed to read FMU {path}: {e}") from e
 
-    # Parse variables
-    variables = _parse_scalar_variables(root)
+    # Build valueReference lookup from XML (pyssp_standard doesn't parse this)
+    vr_by_name: Dict[str, int] = {}
+    for sv_elem in _iter_elems(root, "ScalarVariable", ns):
+        name = sv_elem.get("name", "")
+        vr = int(sv_elem.get("valueReference", "0"))
+        vr_by_name[name] = vr
+
+    # Build ScalarVariable dict from pyssp_standard + valueReference lookup
+    variables: Dict[str, ScalarVariable] = {}
     variables_by_ref: Dict[int, ScalarVariable] = {}
-    for var in variables.values():
-        variables_by_ref[var.value_reference] = var
 
-    # Find continuous states
-    continuous_states = [
-        v.name for v in variables.values()
-        if v.causality == "local" and v.variability == "continuous"
-    ]
+    for pyssp_var in md.variables():
+        name = pyssp_var.name
+        vr = vr_by_name.get(name, 0)
 
-    # Find event indicators
-    num_event_indicators_str = root.get("numberOfEventIndicators", "0")
-    num_event_indicators = int(num_event_indicators_str)
+        # Extract type name from pyssp_standard's type_ attribute
+        type_name = pyssp_var.type_.__class__.__name__
+        if type_name.startswith("Type"):
+            type_name = type_name[4:]  # "TypeReal" -> "Real"
+
+        # Extract start/unit from the type_ object
+        start = None
+        unit = None
+        if hasattr(pyssp_var.type_, 'start'):
+            start = pyssp_var.type_.start
+        if hasattr(pyssp_var.type_, 'unit'):
+            unit = pyssp_var.type_.unit
+
+        sv = ScalarVariable(
+            name=name,
+            value_reference=vr,
+            type=type_name,
+            causality=pyssp_var.causality,
+            variability=pyssp_var.variability,
+            description=pyssp_var.description,
+            unit=unit,
+            start=start,
+        )
+        variables[sv.name] = sv
+        variables_by_ref[sv.value_reference] = sv
+
+    # Extract modelIdentifier from ModelExchange element
+    model_identifier = me_elem.get("modelIdentifier", "")
+
+    # Extract capability flags from ModelExchange
+    has_capabilities = False
+    can_get_and_set_state = False
+    can_serialize_fmu_state = False
+    can_get_directional_derivative = False
+    if me_elem is not None:
+        has_capabilities = True
+        can_get_and_set_state = me_elem.get("canGetAndSetState", "false").lower() == "true"
+        can_serialize_fmu_state = me_elem.get("canSerializeFMUstate", "false").lower() == "true"
+        can_get_directional_derivative = me_elem.get("providesDirectionalDerivative", "false").lower() == "true"
 
     # Detect unsupported features
-    unsupported = _detect_unsupported_features(root)
+    unsupported = _detect_unsupported_features(root, ns)
+
+    # Count continuous states and event indicators
+    n_continuous_states = 0
+    n_event_indicators = 0
+    if me_elem is not None:
+        n_continuous_states = int(me_elem.get("numberOfContinuousStates", "0"))
+        n_event_indicators = int(me_elem.get("numberOfEventIndicators", "0"))
 
     return FmuMetadata(
-        fmi_version=fmi_version,
-        guid=guid,
-        model_name=model_name,
         model_identifier=model_identifier,
-        model_types=model_types,
-        can_get_and_set_fmu_state=can_get_set_state,
-        can_serialize_fmu_state=can_serialize,
-        can_provide_directional_derivatives=can_provide_directional,
-        provides_directional_derivatives=can_provide_directional,
+        fmi_version="2.0",
+        guid=root.get("guid", ""),
+        model_name=root.get("modelName", ""),
+        description=root.get("description", ""),
+        author=root.get("author", ""),
+        version=root.get("version", ""),
+        generation_tool=root.get("generationTool", ""),
+        generation_date_and_time=root.get("generationDateAndTime", ""),
         variables=variables,
         variables_by_ref=variables_by_ref,
-        unsupported_features=unsupported,
+        n_continuous_states=n_continuous_states,
+        n_event_indicators=n_event_indicators,
+        has_capabilities=has_capabilities,
+        can_get_and_set_state=can_get_and_set_state,
+        can_serialize_fmu_state=can_serialize_fmu_state,
+        can_get_directional_derivative=can_get_directional_derivative,
+        unsupported=unsupported,
     )

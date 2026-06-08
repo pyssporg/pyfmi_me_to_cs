@@ -19,6 +19,7 @@
 
 | IMP-006 | GitHub Actions CI workflow | Evolution | Completed | 2026-06-05 | `.github/workflows/test.yml` |
 | IMP-011 | Test fixture improvements   | Evolution | Completed | 2026-06-05 | `tests/conftest.py`, `tests/fixtures/` |
+| IMP-013 | Optional `[[variables]]` + pyssp-standard backend | Evolution | Completed | 2026-06-05 | `src/cs_fmu_packager/fmu_reader.py`, `src/cs_fmu_packager/spec.py`, `src/cs_fmu_packager/mapper.py`, `pyproject.toml`, `tests/` |
 
 ### Constraints
 

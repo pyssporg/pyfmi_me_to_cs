@@ -20,7 +20,8 @@ For design intent, full scope, and architectural motivation, see
 | Python | 3.10 | |
 | CMake | 3.20 | Build system for the generated C wrapper |
 | C compiler | — | gcc or clang (Linux x86_64, see [AD-006](product-breakdown/02-architecture/decisions/AD-006-linux-x86-64-v1.md)) |
-| vcpkg | — | With [SUNDIALS](product-breakdown/02-architecture/decisions/AD-002-sundials-solver.md) installed (see [AD-007](product-breakdown/02-architecture/decisions/AD-007-vcpkg-package-manager.md)) |
+| vcpkg      | —              | With [SUNDIALS](product-breakdown/02-architecture/decisions/AD-002-sundials-solver.md) installed (see [AD-007](product-breakdown/02-architecture/decisions/AD-007-vcpkg-package-manager.md)) |
+| pyssp-standard | 0.8        | FMU metadata inspection (installed automatically via pip) |
 
 ## Installation
 
@@ -68,6 +69,10 @@ communication_step = 1e-3
 [wrapper]
 communication_step = 1e-3
 ```
+
+> **Note:** The `[[variables]]` section is optional. If omitted, all FMU inputs,
+> outputs, and parameters are automatically exposed as wrapper boundary variables
+> (see [IMP-013](product-breakdown/06-evolution/candidates/IMP-013.md)).
 
 Build the Co-Simulation FMU:
 

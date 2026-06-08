@@ -298,6 +298,32 @@ communication_step = 0.02
             parse_spec(path)
         assert "communication_step" in str(exc.value) and "equal" in str(exc.value)
 
+    def test_spec_without_variables_section(self):
+        """Spec without [[variables]] should parse successfully (IMP-013)."""
+        content = """
+[metadata]
+identifier = "test"
+
+[fmus]
+src = { path = "src.fmu" }
+tgt = { path = "tgt.fmu" }
+
+[[connections]]
+source = "src.out"
+target = "tgt.in"
+
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+
+[wrapper]
+communication_step = 0.001
+"""
+        path = _write_spec(content)
+        spec = parse_spec(path)
+        assert spec.variables == []  # Should be empty list, not error
+
     def test_integer_type_accepted(self):
         """Integer type should be accepted (IC-006)."""
         content = """
@@ -397,3 +423,35 @@ communication_step = 0.001
         with pytest.raises(SpecValidationError) as exc:
             parse_spec(path)
         assert "start" in str(exc.value)
+
+    def test_spec_with_variables_section_still_works(self):
+        """Spec with [[variables]] should still parse correctly (backward compat)."""
+        content = """
+[metadata]
+identifier = "test"
+
+[fmus]
+src = { path = "src.fmu" }
+
+[[connections]]
+source = "src.out"
+target = "src.in"
+
+[[variables]]
+name = "my_input"
+type = "Real"
+causality = "input"
+target = "src.some_input"
+
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.001
+
+[wrapper]
+communication_step = 0.001
+"""
+        path = _write_spec(content)
+        spec = parse_spec(path)
+        assert len(spec.variables) == 1
+        assert spec.variables[0].name == "my_input"

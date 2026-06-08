@@ -190,6 +190,54 @@ def _topological_sort(
     return flattened
 
 
+def _auto_discover_variables(
+    fmu_metadatas: dict[str, FmuMetadata],
+) -> list[WrapperVariable]:
+    """Auto-discover wrapper variables from FMU metadata (Option A: Expose all).
+
+    Creates a WrapperVariable for every input, output, and parameter
+    from all FMUs. Inputs and parameters become wrapper inputs (target),
+    outputs become wrapper outputs (source).
+    """
+    variables: list[WrapperVariable] = []
+    for fmu_id, meta in fmu_metadatas.items():
+        for var in meta.variables.values():
+            if var.causality == "input":
+                variables.append(WrapperVariable(
+                    name=var.name,
+                    type=var.type,
+                    causality="input",
+                    target_fmu=fmu_id,
+                    target_variable=var.name,
+                    source_fmu=None,
+                    source_variable=None,
+                    description=var.description or "",
+                ))
+            elif var.causality == "output":
+                variables.append(WrapperVariable(
+                    name=var.name,
+                    type=var.type,
+                    causality="output",
+                    source_fmu=fmu_id,
+                    source_variable=var.name,
+                    target_fmu=None,
+                    target_variable=None,
+                    description=var.description or "",
+                ))
+            elif var.causality == "parameter":
+                variables.append(WrapperVariable(
+                    name=var.name,
+                    type=var.type,
+                    causality="parameter",
+                    target_fmu=fmu_id,
+                    target_variable=var.name,
+                    source_fmu=None,
+                    source_variable=None,
+                    description=var.description or "",
+                ))
+    return variables
+
+
 def build_mapping(spec: PackageSpec) -> MappingTable:
     """Build a resolved MappingTable from a PackageSpec.
 
@@ -209,6 +257,10 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
     fmu_metadatas: Dict[str, FmuMetadata] = {}
     for fmu_id, fmu_ref in spec.fmus.items():
         fmu_metadatas[fmu_id] = inspect_fmu(fmu_ref.path)
+
+    # Auto-discover variables if spec has none (IMP-013, Option A)
+    if not spec.variables:
+        spec.variables = _auto_discover_variables(fmu_metadatas)
 
     warnings: List[str] = []
 
@@ -314,7 +366,7 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
 
     # Collect warnings from unsupported FMU features
     for fmu_id, meta in fmu_metadatas.items():
-        for feature in meta.unsupported_features:
+        for feature in meta.unsupported:
             warnings.append(f"FMU '{fmu_id}': {feature}")
 
     return MappingTable(

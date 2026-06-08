@@ -223,3 +223,41 @@ def test_mapping_with_non_real_types(fmus_dir: str):
     assert vars_by_name["int_param"].variable_type == "Integer"
     assert vars_by_name["int_param"].start == 42
     assert vars_by_name["bool_out"].variable_type == "Boolean"
+
+
+def test_auto_discover_variables(fmus_dir: str):
+    """build_mapping should auto-discover variables when spec has none (IMP-013)."""
+    from cs_fmu_packager.mapper import _auto_discover_variables
+    from cs_fmu_packager.models import FmuMetadata, ScalarVariable
+
+    meta = FmuMetadata(
+        model_identifier="test",
+        fmi_version="2.0",
+        guid="{test}",
+        model_name="Test",
+        variables={
+            "in1": ScalarVariable(name="in1", value_reference=0, type="Real", causality="input"),
+            "out1": ScalarVariable(name="out1", value_reference=1, type="Real", causality="output"),
+            "param1": ScalarVariable(name="param1", value_reference=2, type="Real", causality="parameter"),
+            "local1": ScalarVariable(name="local1", value_reference=3, type="Real", causality="local"),
+        },
+        variables_by_ref={},
+    )
+    result = _auto_discover_variables({"fmu1": meta})
+    # Should have 3 variables (input, output, parameter) — NOT local
+    assert len(result) == 3
+    # Check input
+    inputs = [v for v in result if v.causality == "input"]
+    assert len(inputs) == 1
+    assert inputs[0].name == "in1"
+    assert inputs[0].target_fmu == "fmu1"
+    # Check output
+    outputs = [v for v in result if v.causality == "output"]
+    assert len(outputs) == 1
+    assert outputs[0].name == "out1"
+    assert outputs[0].source_fmu == "fmu1"
+    # Check parameter
+    params = [v for v in result if v.causality == "parameter"]
+    assert len(params) == 1
+    assert params[0].name == "param1"
+    assert params[0].target_fmu == "fmu1"

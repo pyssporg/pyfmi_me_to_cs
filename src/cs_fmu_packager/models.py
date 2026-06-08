@@ -116,17 +116,21 @@ class FmuMetadata:
     fmi_version: str
     guid: str
     model_name: str
-    model_types: List[str] = field(default_factory=list)
-    can_get_and_set_fmu_state: bool = False
-    can_serialize_fmu_state: bool = False
-    can_provide_directional_derivatives: bool = False
-    provides_directional_derivatives: bool = False
+    model_identifier: str = ""
+    description: str = ""
+    author: str = ""
+    version: str = ""
+    generation_tool: str = ""
+    generation_date_and_time: str = ""
     variables: Dict[str, ScalarVariable] = field(default_factory=dict)
     variables_by_ref: Dict[int, ScalarVariable] = field(default_factory=dict)
-    model_identifier: str = ""
-    continuous_states: List[str] = field(default_factory=list)
-    event_indicators: List[str] = field(default_factory=list)
-    unsupported_features: List[str] = field(default_factory=list)
+    n_continuous_states: int = 0
+    n_event_indicators: int = 0
+    has_capabilities: bool = False
+    can_get_and_set_state: bool = False
+    can_serialize_fmu_state: bool = False
+    can_get_directional_derivative: bool = False
+    unsupported: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

@@ -75,6 +75,10 @@ communication_step = 1e-3
 communication_step = 1e-3
 ```
 
+> **Note:** The `[[variables]]` section is optional. If omitted, all FMU inputs,
+> outputs, and parameters are automatically exposed as wrapper boundary variables
+> (see [IMP-013](product-breakdown/06-evolution/candidates/IMP-013.md)).
+
 Replace `"path/to/compressor.fmu"` and `"path/to/valve.fmu"` with the actual paths to your FMI 2.0 Model Exchange FMU files.
 
 For a fully commented example, see `spec.example.toml` (if available in the repository root; see [IMP-002](product-breakdown/06-evolution/candidates/IMP-002.md)).
@@ -141,7 +145,7 @@ sudo apt install build-essential
 ```
 
 ### Spec validation errors
-- Check that all five required sections are present: `[fmus]`, `[[connections]]`, `[[variables]]`, `[solver]`, `[wrapper]`.
+- Check that required sections are present: `[fmus]`, `[[connections]]`, `[solver]`, `[wrapper]`. The `[[variables]]` section is optional.
 - Use `"fixed_step"` (not `"fixed-step"`) for `solver.type`.
 - Ensure `solver.communication_step` equals `wrapper.communication_step`.
 - FMU paths should be absolute or relative to the working directory.

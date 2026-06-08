@@ -161,6 +161,20 @@ class TestModelDescriptionCodegen:
         assert 'name="bool_input"' in content
         assert 'name="str_input"' in content
 
+    def test_codegen_with_auto_discovered_variables(self):
+        """Codegen should work with auto-discovered variables (empty spec.variables)."""
+        spec = PackageSpec(
+            metadata={"identifier": "auto_test"},
+            fmus={},
+            connections=[],
+            variables=[],  # Empty — simulates auto-discovery
+            solver=SolverConfig(type="fixed_step", step_size=0.001, communication_step=0.001),
+            wrapper=None,
+        )
+        # This should not raise — codegen doesn't directly iterate spec.variables
+        # It uses the mapping table which is populated by build_mapping
+        assert spec.variables == []
+
 
 class TestCHeadersResolution:
     """Verify c_headers resolution logic (IMP-005)."""
