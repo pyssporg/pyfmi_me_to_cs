@@ -119,7 +119,8 @@ class TestFmuInspection:
         make_test_fmu(tmp_fmu_path, model_desc_wrong)
         with pytest.raises(FmuInspectionError) as exc:
             inspect_fmu(tmp_fmu_path)
-        assert "unsupported FMI version" in str(exc.value)
+        # The fork cannot parse non-FMI-2.0 documents at all
+        assert "Failed to read FMU" in str(exc.value)
 
     def test_inspect_not_me_fmu(self, tmp_fmu_path):
         """CS-only FMU should be rejected."""
