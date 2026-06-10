@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from pyssp_standard.standard.fmi2.model.model_description import Fmi2ModelDescriptionDocument
+
 
 # ---------------------------------------------------------------------------
 # Package Specification Models
@@ -90,46 +92,12 @@ class PackageSpec:
 
 
 # ---------------------------------------------------------------------------
-# FMU Metadata (from modelDescription.xml)
+# FMU Metadata (from modelDescription.xml) — delegated to pyssp_standard
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class ScalarVariable:
-    """Metadata for a single ScalarVariable in an FMU."""
-
-    name: str
-    value_reference: int
-    type: str  # "Real", "Integer", "Boolean", "String"
-    causality: str = "local"
-    variability: str = "continuous"
-    description: Optional[str] = None
-    unit: Optional[str] = None
-    start: Optional[float] = None
-
-
-@dataclass
-class FmuMetadata:
-    """Parsed metadata from an FMU's modelDescription.xml."""
-
-    fmi_version: str
-    guid: str
-    model_name: str
-    model_identifier: str = ""
-    description: str = ""
-    author: str = ""
-    version: str = ""
-    generation_tool: str = ""
-    generation_date_and_time: str = ""
-    variables: Dict[str, ScalarVariable] = field(default_factory=dict)
-    n_continuous_states: int = 0
-    n_event_indicators: int = 0
-    has_capabilities: bool = False
-    can_get_and_set_state: bool = False
-    can_serialize_fmu_state: bool = False
-    can_get_directional_derivative: bool = False
-    unsupported: List[str] = field(default_factory=list)
-
+# FmuMetadata and ScalarVariable have been removed.
+# Use Fmi2ModelDescriptionDocument and Fmi2ScalarVariable from
+# pyssp_standard.standard.fmi2.model.model_description instead.
+# See fmu_reader.inspect_fmu() which now returns Fmi2ModelDescriptionDocument.
 
 # ---------------------------------------------------------------------------
 # Mapping Table
@@ -185,7 +153,7 @@ class AlgebraicLoop:
 class MappingTable:
     """Complete resolved mapping for the packaging pipeline."""
 
-    fmus: Dict[str, FmuMetadata]
+    fmus: Dict[str, Fmi2ModelDescriptionDocument]
     wrapper_inputs: List[MappedVariable] = field(default_factory=list)
     wrapper_outputs: List[MappedVariable] = field(default_factory=list)
     wrapper_parameters: List[MappedVariable] = field(default_factory=list)

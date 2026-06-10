@@ -8,7 +8,7 @@ import pytest
 from tests.helpers import make_test_fmu
 from cs_fmu_packager.errors import FmuInspectionError
 from cs_fmu_packager.fmu_reader import inspect_fmu
-from cs_fmu_packager.models import FmuMetadata
+from pyssp_standard.standard.fmi2.model.model_description import Fmi2ModelDescriptionDocument
 
 
 MINIMAL_ME_MODEL_DESC = """<?xml version="1.0" encoding="UTF-8"?>
@@ -68,28 +68,31 @@ class TestFmuInspection:
         """Test basic FMU inspection."""
         make_test_fmu(tmp_fmu_path, MINIMAL_ME_MODEL_DESC)
 
-        meta = inspect_fmu(tmp_fmu_path)
-        assert meta.fmi_version == "2.0"
-        assert meta.model_name == "TestFMU"
-        assert meta.model_identifier == "TestFMU"
-        assert len(meta.variables) == 3
+        doc = inspect_fmu(tmp_fmu_path)
+        assert doc.fmi_version == "2.0"
+        assert doc.model_name == "TestFMU"
+        assert doc.capabilities is not None
+        assert doc.capabilities.model_identifier == "TestFMU"
+        assert len(doc.variables) == 3
 
-        # Check specific variables
-        assert "u" in meta.variables
-        assert meta.variables["u"].causality == "input"
-        assert meta.variables["u"].value_reference == 0
+        # Build lookup for variable assertions
+        var_map = {v.name: v for v in doc.variables}
+        assert "u" in var_map
+        assert var_map["u"].causality == "input"
+        assert var_map["u"].value_reference == 0
 
-        assert "y" in meta.variables
-        assert meta.variables["y"].causality == "output"
+        assert "y" in var_map
+        assert var_map["y"].causality == "output"
 
-        assert "x" in meta.variables
-        assert meta.variables["x"].causality == "local"
+        assert "x" in var_map
+        assert var_map["x"].causality == "local"
 
     def test_inspect_fmu_model_identifier(self, tmp_fmu_path):
-        """FmuMetadata should contain modelIdentifier parsed from XML."""
+        """Fmi2ModelDescriptionDocument.capabilities should contain modelIdentifier."""
         make_test_fmu(tmp_fmu_path, MINIMAL_ME_MODEL_DESC)
-        meta = inspect_fmu(tmp_fmu_path)
-        assert meta.model_identifier == "TestFMU"
+        doc = inspect_fmu(tmp_fmu_path)
+        assert doc.capabilities is not None
+        assert doc.capabilities.model_identifier == "TestFMU"
 
     def test_inspect_nonexistent_fmu(self):
         with pytest.raises(FmuInspectionError) as exc:
@@ -136,10 +139,10 @@ class TestFmuInspection:
     def test_inspect_fmu_returns_variable_details(self, tmp_fmu_path):
         """inspect_fmu should return variables with correct metadata."""
         make_test_fmu(tmp_fmu_path, MINIMAL_ME_MODEL_DESC)
-        meta = inspect_fmu(tmp_fmu_path)
-        assert len(meta.variables) > 0
+        doc = inspect_fmu(tmp_fmu_path)
+        assert len(doc.variables) > 0
         # Check that at least one variable has a value_reference
-        for name, var in meta.variables.items():
+        for var in doc.variables:
             assert var.value_reference >= 0
-            assert var.type in ("Real", "Integer", "Boolean", "String", "Enumeration")
+            assert var.type_name in ("Real", "Integer", "Boolean", "String", "Enumeration")
             assert var.causality in ("input", "output", "parameter", "local", "independent")

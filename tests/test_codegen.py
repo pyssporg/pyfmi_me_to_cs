@@ -10,15 +10,17 @@ from cs_fmu_packager.codegen.cmake import generate_cmake
 from cs_fmu_packager.codegen.fmi_interface import generate_fmi_interface_impl
 from cs_fmu_packager.model_description import generate_model_description
 from cs_fmu_packager.models import (
-    FmuMetadata,
     FmuRef,
     MappingTable,
     MappedVariable,
     PackageSpec,
     ResolvedConnection,
-    ScalarVariable,
     SolverConfig,
     WrapperConfig,
+)
+from pyssp_standard.standard.fmi2.model.model_description import (
+    Fmi2ModelDescriptionDocument,
+    Fmi2ScalarVariable,
 )
 
 
@@ -37,27 +39,28 @@ def sample_spec() -> PackageSpec:
 
 @pytest.fixture
 def sample_mapping() -> MappingTable:
+    src_vars = [
+        Fmi2ScalarVariable(name="u", value_reference=0, type_name="Real", causality="input"),
+        Fmi2ScalarVariable(name="y", value_reference=1, type_name="Real", causality="output"),
+    ]
+    tgt_vars = [
+        Fmi2ScalarVariable(name="u", value_reference=0, type_name="Real", causality="input"),
+        Fmi2ScalarVariable(name="y", value_reference=1, type_name="Real", causality="output"),
+    ]
+    from pyssp_standard.standard.fmi2.model.model_description import Fmi2InterfaceAttributes
     return MappingTable(
         fmus={
-            "src": FmuMetadata(
-                fmi_version="2.0",
-                guid="{src-guid}",
-                model_name="SrcFMU",
-                model_identifier="src_model",
-                variables={
-                    "u": ScalarVariable(name="u", value_reference=0, type="Real", causality="input"),
-                    "y": ScalarVariable(name="y", value_reference=1, type="Real", causality="output"),
-                },
+            "src": Fmi2ModelDescriptionDocument(
+                root=None, fmi_version="2.0", guid="{src-guid}", model_name="SrcFMU",
+                variables=src_vars, unit_definitions=[], type_definitions=[],
+                model_structure=None,
+                capabilities=Fmi2InterfaceAttributes(model_identifier="src_model"),
             ),
-            "tgt": FmuMetadata(
-                fmi_version="2.0",
-                guid="{tgt-guid}",
-                model_name="TgtFMU",
-                model_identifier="tgt_model",
-                variables={
-                    "u": ScalarVariable(name="u", value_reference=0, type="Real", causality="input"),
-                    "y": ScalarVariable(name="y", value_reference=1, type="Real", causality="output"),
-                },
+            "tgt": Fmi2ModelDescriptionDocument(
+                root=None, fmi_version="2.0", guid="{tgt-guid}", model_name="TgtFMU",
+                variables=tgt_vars, unit_definitions=[], type_definitions=[],
+                model_structure=None,
+                capabilities=Fmi2InterfaceAttributes(model_identifier="tgt_model"),
             ),
         },
         wrapper_inputs=[
@@ -209,27 +212,33 @@ class TestCHeadersResolution:
 
 @pytest.fixture
 def full_type_mapping() -> MappingTable:
-    from cs_fmu_packager.models import (
-        FmuMetadata, ScalarVariable, MappedVariable, MappingTable, PackageSpec, SolverConfig, WrapperConfig,
+    from pyssp_standard.standard.fmi2.model.model_description import Fmi2InterfaceAttributes
+    all_vars = [
+        Fmi2ScalarVariable(name='u_r', value_reference=0, type_name='Real', causality='input'),
+        Fmi2ScalarVariable(name='u_i', value_reference=1, type_name='Integer', causality='input'),
+        Fmi2ScalarVariable(name='u_b', value_reference=2, type_name='Boolean', causality='input'),
+        Fmi2ScalarVariable(name='u_s', value_reference=3, type_name='String', causality='input'),
+        Fmi2ScalarVariable(name='y_r', value_reference=10, type_name='Real', causality='output'),
+        Fmi2ScalarVariable(name='y_i', value_reference=11, type_name='Integer', causality='output'),
+        Fmi2ScalarVariable(name='y_b', value_reference=12, type_name='Boolean', causality='output'),
+        Fmi2ScalarVariable(name='y_s', value_reference=13, type_name='String', causality='output'),
+        Fmi2ScalarVariable(name='p_r', value_reference=20, type_name='Real', causality='parameter'),
+        Fmi2ScalarVariable(name='p_i', value_reference=21, type_name='Integer', causality='parameter'),
+        Fmi2ScalarVariable(name='p_b', value_reference=22, type_name='Boolean', causality='parameter'),
+        Fmi2ScalarVariable(name='p_s', value_reference=23, type_name='String', causality='parameter'),
+    ]
+    src_fmu = Fmi2ModelDescriptionDocument(
+        root=None, fmi_version='2.0', guid='{src-guid}', model_name='SrcFMU',
+        variables=all_vars, unit_definitions=[], type_definitions=[],
+        model_structure=None,
+        capabilities=Fmi2InterfaceAttributes(model_identifier='src_model'),
     )
-    variables = {
-        'u_r': ScalarVariable(name='u_r', value_reference=0, type='Real', causality='input'),
-        'u_i': ScalarVariable(name='u_i', value_reference=1, type='Integer', causality='input'),
-        'u_b': ScalarVariable(name='u_b', value_reference=2, type='Boolean', causality='input'),
-        'u_s': ScalarVariable(name='u_s', value_reference=3, type='String', causality='input'),
-        'y_r': ScalarVariable(name='y_r', value_reference=10, type='Real', causality='output'),
-        'y_i': ScalarVariable(name='y_i', value_reference=11, type='Integer', causality='output'),
-        'y_b': ScalarVariable(name='y_b', value_reference=12, type='Boolean', causality='output'),
-        'y_s': ScalarVariable(name='y_s', value_reference=13, type='String', causality='output'),
-        'p_r': ScalarVariable(name='p_r', value_reference=20, type='Real', causality='parameter'),
-        'p_i': ScalarVariable(name='p_i', value_reference=21, type='Integer', causality='parameter'),
-        'p_b': ScalarVariable(name='p_b', value_reference=22, type='Boolean', causality='parameter'),
-        'p_s': ScalarVariable(name='p_s', value_reference=23, type='String', causality='parameter'),
-    }
-    src_fmu = FmuMetadata(fmi_version='2.0', guid='{src-guid}', model_name='SrcFMU',
-                          model_identifier='src_model', variables=variables)
-    tgt_fmu = FmuMetadata(fmi_version='2.0', guid='{tgt-guid}', model_name='TgtFMU',
-                          model_identifier='tgt_model', variables={})
+    tgt_fmu = Fmi2ModelDescriptionDocument(
+        root=None, fmi_version='2.0', guid='{tgt-guid}', model_name='TgtFMU',
+        variables=[], unit_definitions=[], type_definitions=[],
+        model_structure=None,
+        capabilities=Fmi2InterfaceAttributes(model_identifier='tgt_model'),
+    )
     mapping = MappingTable(
         fmus={'src': src_fmu, 'tgt': tgt_fmu},
         wrapper_inputs=[

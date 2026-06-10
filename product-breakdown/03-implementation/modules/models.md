@@ -17,17 +17,16 @@ Defines the structured representation of package specifications, parsed FMU meta
 | `SolverConfig` | type, step_size, communication_step, algebraic_loop | Solver configuration for the wrapper |
 | `WrapperConfig` | communication_step | Wrapper-level configuration |
 | `PackageSpec` | metadata, fmus, connections, variables, solver, wrapper | Complete parsed package specification |
-| `ScalarVariable` | name, value_reference, type, causality, variability, description, unit, start | Metadata for a single ScalarVariable in an FMU |
-| `FmuMetadata` | fmi_version, guid, model_name, variables, unsupported_features, ... | Parsed metadata from FMU modelDescription.xml |
+| *(removed, delegated)* | — | `ScalarVariable` and `FmuMetadata` removed in IMP-027. Use `Fmi2ScalarVariable` and `Fmi2ModelDescriptionDocument` from `pyssp_standard.standard.fmi2.model.model_description` instead. |
 | `MappedVariable` | wrapper_name, variable_type, causality, target/source refs, start, ... | A resolved variable mapping between wrapper and internal FMU |
 | `ResolvedConnection` | source_fmu/var/vr, target_fmu/var/vr | A resolved internal connection with value references |
 | `AlgebraicLoop` | fmus, connections, iterations, tolerance | Detected strongly connected component |
-| `MappingTable` | fmus, wrapper_inputs/outputs/parameters, connections, algebraic_loops, execution_order, warnings | Complete resolved mapping |
+| `MappingTable` | fmus (Dict[str, Fmi2ModelDescriptionDocument]), wrapper_inputs/outputs/parameters, connections, algebraic_loops, execution_order, warnings | Complete resolved mapping |
 | `BuildReport` | spec_path, output_path, tool_version, fmu_count, variable_count, ... | Machine-readable build report |
 
 ## Source
 
-- `src/cs_fmu_packager/models.py` (219 lines)
+- `src/cs_fmu_packager/models.py` (211 lines)
 
 ## Related Tests
 

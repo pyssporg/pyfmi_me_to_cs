@@ -227,21 +227,20 @@ def test_mapping_with_non_real_types(fmus_dir: str):
 def test_auto_discover_variables(fmus_dir: str):
     """build_mapping should auto-discover variables when spec has none (IMP-013)."""
     from cs_fmu_packager.mapper import _auto_discover_variables
-    from cs_fmu_packager.models import FmuMetadata, ScalarVariable
+    from pyssp_standard.standard.fmi2.model.model_description import (
+        Fmi2ModelDescriptionDocument, Fmi2ScalarVariable,
+    )
 
-    meta = FmuMetadata(
-        model_identifier="test",
-        fmi_version="2.0",
-        guid="{test}",
-        model_name="Test",
-        variables={
-            "in1": ScalarVariable(name="in1", value_reference=0, type="Real", causality="input"),
-            "out1": ScalarVariable(name="out1", value_reference=1, type="Real", causality="output"),
-            "param1": ScalarVariable(name="param1", value_reference=2, type="Real", causality="parameter"),
-            "local1": ScalarVariable(name="local1", value_reference=3, type="Real", causality="local"),
-        },
-        )
-    result = _auto_discover_variables({"fmu1": meta})
+    in1 = Fmi2ScalarVariable(name="in1", value_reference=0, type_name="Real", causality="input")
+    out1 = Fmi2ScalarVariable(name="out1", value_reference=1, type_name="Real", causality="output")
+    param1 = Fmi2ScalarVariable(name="param1", value_reference=2, type_name="Real", causality="parameter")
+    local1 = Fmi2ScalarVariable(name="local1", value_reference=3, type_name="Real", causality="local")
+    doc = Fmi2ModelDescriptionDocument(
+        root=None, fmi_version="2.0", model_name="Test", guid="{test}",
+        variables=[in1, out1, param1, local1],
+        unit_definitions=[], type_definitions=[], model_structure=None,
+    )
+    result = _auto_discover_variables({"fmu1": doc})
     # Should have 3 variables (input, output, parameter) — NOT local
     assert len(result) == 3
     # Check input

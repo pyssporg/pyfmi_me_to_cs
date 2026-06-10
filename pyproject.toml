@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cs-fmu-packager"
-version = "0.1.0"
+version = "0.1.1"
 description = "Package FMI 2.0 Model Exchange FMUs into a single Co-Simulation FMU"
 readme = "cs-fmu-packager-project/README.md"
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ dependencies = [
     "click>=8.0",
     "toml>=0.10",
     
-    "pyssp-standard @ git+https://github.com/jkCXf9X4/pyssp_standard@cc271327af6d3bdbe1ea111e658e8f5663333f32",
+    "pyssp-standard @ git+https://github.com/jkCXf9X4/pyssp_standard@architecture_review",
 ]
 
 [project.scripts]
@@ -21,9 +21,6 @@ cs-fmu-packager = "cs_fmu_packager.cli:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
-]
-test = [
     "pytest>=7.0",
     "fmpy>=0.3",
 ]

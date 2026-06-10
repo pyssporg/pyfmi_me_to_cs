@@ -12,7 +12,7 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
     """
     fmu_name = spec.metadata.get("identifier", "cs_fmu")
     total_nx = sum(
-        len([v for v in fmu.variables.values()
+        len([v for v in fmu.variables
              if v.causality == "local" and v.variability == "continuous"])
         for fmu in mapping.fmus.values()
     )
@@ -21,7 +21,7 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
     for fmu_id in mapping.execution_order:
         fmu = mapping.fmus.get(fmu_id)
         if fmu:
-            nx = len([v for v in fmu.variables.values()
+            nx = len([v for v in fmu.variables
                      if v.causality == "local" and v.variability == "continuous"])
             fmu_entries.append(f"    /* {fmu_id}: {fmu.model_name}, nx={nx} */")
 

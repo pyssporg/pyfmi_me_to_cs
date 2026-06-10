@@ -81,9 +81,12 @@ class TestAssemblyWithoutBuild:
 
             # Create spec
             from cs_fmu_packager.models import (
-                Connection, FmuMetadata, FmuRef, MappingTable,
-                MappedVariable, PackageSpec, ResolvedConnection,
-                ScalarVariable, SolverConfig, WrapperConfig,
+                FmuRef, MappingTable,
+                MappedVariable, PackageSpec,
+                SolverConfig, WrapperConfig,
+            )
+            from pyssp_standard.standard.fmi2.model.model_description import (
+                Fmi2ModelDescriptionDocument, Fmi2ScalarVariable,
             )
 
             spec = PackageSpec(
@@ -95,10 +98,11 @@ class TestAssemblyWithoutBuild:
 
             mapping = MappingTable(
                 fmus={
-                    "internal": FmuMetadata(
-                        fmi_version="2.0",
-                        guid="{test-guid}",
+                    "internal": Fmi2ModelDescriptionDocument(
+                        root=None, fmi_version="2.0", guid="{test-guid}",
                         model_name="InternalFMU",
+                        variables=[], unit_definitions=[], type_definitions=[],
+                        model_structure=None,
                     ),
                 },
                 execution_order=["internal"],
@@ -134,8 +138,11 @@ class TestAssemblyWithoutBuild:
                 zf.writestr("modelDescription.xml", "<fmiModelDescription/>")
 
             from cs_fmu_packager.models import (
-                FmuMetadata, FmuRef, MappingTable, PackageSpec,
+                FmuRef, MappingTable, PackageSpec,
                 SolverConfig, WrapperConfig,
+            )
+            from pyssp_standard.standard.fmi2.model.model_description import (
+                Fmi2ModelDescriptionDocument,
             )
 
             spec = PackageSpec(
@@ -147,10 +154,11 @@ class TestAssemblyWithoutBuild:
 
             mapping = MappingTable(
                 fmus={
-                    "m": FmuMetadata(
-                        fmi_version="2.0",
-                        guid="{test}",
+                    "m": Fmi2ModelDescriptionDocument(
+                        root=None, fmi_version="2.0", guid="{test}",
                         model_name="M",
+                        variables=[], unit_definitions=[], type_definitions=[],
+                        model_structure=None,
                     ),
                 },
                 execution_order=["m"],

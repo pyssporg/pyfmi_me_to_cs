@@ -37,7 +37,7 @@ INT-003 Support coupled subsystems with feedback
         -> SR-005 Define behavior for algebraic/direct-feedthrough loops
           -> AD-003 Fixed-Point Iteration for Algebraic Loops
             -> 02-architecture/component-view.md (mapper phase)
-              -> 03-implementation/modules/mapper.md (Tarjan's SCC detection)
+              -> 03-implementation/modules/mapper.md (pyssp_standard connection_graph delegate)
               -> 03-implementation/modules/codegen-fixed-point.md (fixed_point_iteration.c)
                 -> 04-verification/test-cases/test_mapper.md (test_algebraic_loop_detection_internal)
 ```

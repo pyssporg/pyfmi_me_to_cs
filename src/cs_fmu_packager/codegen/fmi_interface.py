@@ -111,7 +111,8 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
     # Build FMU loading code
     fmu_load_blocks = []
     for idx, (fmu_id, fmu_ref) in enumerate(spec.fmus.items()):
-        model_identifier = mapping.fmus[fmu_id].model_identifier or fmu_id
+        caps = mapping.fmus[fmu_id].capabilities
+        model_identifier = (caps.model_identifier if caps else None) or fmu_id
         fmu_load_blocks.append(
             f"""    /* Load FMU: {fmu_id} */
     {{

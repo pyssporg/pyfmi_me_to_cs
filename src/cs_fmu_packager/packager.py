@@ -9,9 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import tempfile
 import zipfile
 from datetime import datetime
 from typing import Dict, List, Optional
+
+from pyssp_standard.fmu import FMU
 
 from cs_fmu_packager.errors import PackagingError
 from cs_fmu_packager.model_description import generate_model_description
@@ -40,6 +44,60 @@ def _compute_checksum(path: str) -> str:
     return h.hexdigest()
 
 
+def _assemble_fmu_via_pyssp(
+    spec: PackageSpec,
+    mapping: MappingTable,
+    so_path: str,
+    output_path: str,
+    fmu_name: str,
+    date_time: datetime,
+) -> None:
+    """Assemble FMU using pyssp_standard's FMU.create() pathway.
+
+    Used when ``date_time`` is provided to allow non-deterministic timestamps
+    via FMU.set_generation_date_and_time().
+
+    Args:
+        spec: The package specification.
+        mapping: The resolved mapping table.
+        so_path: Path to the compiled .so shared library.
+        output_path: Path for the output .fmu file.
+        fmu_name: The FMU identifier (without extension).
+        date_time: Generation date and time to set on the FMU.
+    """
+    # Generate modelDescription.xml
+    model_desc_str = generate_model_description(spec, mapping)
+
+    # Write modelDescription.xml to a temp file for FMU.create
+    tmp_xml_fd, tmp_xml_path = tempfile.mkstemp(suffix=".xml")
+    try:
+        with os.fdopen(tmp_xml_fd, "w") as f:
+            f.write(model_desc_str)
+
+        # The .so must be named {fmu_name}.so for correct placement
+        tmp_so_dir = tempfile.mkdtemp()
+        try:
+            corrected_so = os.path.join(tmp_so_dir, f"{fmu_name}.so")
+            shutil.copy2(so_path, corrected_so)
+
+            # Create the FMU archive with model description and binary
+            FMU.create(
+                output_path,
+                model_description=tmp_xml_path,
+                binaries={"linux64": corrected_so},
+            )
+
+            # Open in append mode to add resources and set generation date/time
+            with FMU(output_path, mode="a") as fmu:
+                for fmu_id, fmu_ref in spec.fmus.items():
+                    fmu.add_resource(fmu_ref.path, target_name=f"{fmu_id}.fmu")
+                fmu.set_generation_date_and_time(date_time)
+        finally:
+            shutil.rmtree(tmp_so_dir, ignore_errors=True)
+    finally:
+        os.unlink(tmp_xml_path)
+
+
 def assemble_fmu(
     spec: PackageSpec,
     mapping: MappingTable,
@@ -47,6 +105,7 @@ def assemble_fmu(
     output_path: str,
     fmu_name: Optional[str] = None,
     build_metadata: Optional[dict] = None,
+    date_time: Optional[datetime] = None,
 ) -> BuildReport:
     """Assemble the final FMU ZIP archive.
 
@@ -57,6 +116,10 @@ def assemble_fmu(
         output_path: Path for the output .fmu file.
         fmu_name: Optional override for the FMU identifier.
         build_metadata: Optional build metadata dict (tool versions, etc.).
+        date_time: Optional generation date and time. When provided, uses
+            pyssp_standard's FMU.create() pathway instead of the deterministic
+            ZIP approach. Prepares for deterministic timestamp support in the
+            next release.
 
     Returns:
         BuildReport with build summary.
@@ -77,28 +140,35 @@ def assemble_fmu(
                 f"Internal FMU '{fmu_id}' not found at: {fmu_ref.path}"
             )
 
-    try:
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            # 1. Write modelDescription.xml
-            model_desc = generate_model_description(spec, mapping)
-            info = _make_zip_info("modelDescription.xml")
-            zf.writestr(info, model_desc.encode("utf-8"))
+    if date_time is not None:
+        # Use pyssp_standard FMU.create pathway with non-deterministic timestamps
+        _assemble_fmu_via_pyssp(
+            spec, mapping, so_path, output_path, fmu_name, date_time,
+        )
+    else:
+        # Use deterministic-timestamp ZIP pathway (existing behavior)
+        try:
+            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                # 1. Write modelDescription.xml
+                model_desc = generate_model_description(spec, mapping)
+                info = _make_zip_info("modelDescription.xml")
+                zf.writestr(info, model_desc.encode("utf-8"))
 
-            # 2. Write compiled .so to binaries/linux64/
-            so_target = f"binaries/linux64/{fmu_name}.so"
-            info = _make_zip_info(so_target)
-            with open(so_path, "rb") as f:
-                zf.writestr(info, f.read())
-
-            # 3. Embed internal ME FMUs in resources/
-            for fmu_id, fmu_ref in spec.fmus.items():
-                resource_target = f"resources/{fmu_id}.fmu"
-                info = _make_zip_info(resource_target)
-                with open(fmu_ref.path, "rb") as f:
+                # 2. Write compiled .so to binaries/linux64/
+                so_target = f"binaries/linux64/{fmu_name}.so"
+                info = _make_zip_info(so_target)
+                with open(so_path, "rb") as f:
                     zf.writestr(info, f.read())
 
-    except (OSError, zipfile.BadZipFile) as e:
-        raise PackagingError(f"Failed to create FMU archive: {e}") from e
+                # 3. Embed internal ME FMUs in resources/
+                for fmu_id, fmu_ref in spec.fmus.items():
+                    resource_target = f"resources/{fmu_id}.fmu"
+                    info = _make_zip_info(resource_target)
+                    with open(fmu_ref.path, "rb") as f:
+                        zf.writestr(info, f.read())
+
+        except (OSError, zipfile.BadZipFile) as e:
+            raise PackagingError(f"Failed to create FMU archive: {e}") from e
 
     # Build the report
     fmu_guids: Dict[str, str] = {}
