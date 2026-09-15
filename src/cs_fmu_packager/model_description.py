@@ -49,6 +49,13 @@ def _variability_for_causality(causality: str) -> str:
     }.get(causality, "continuous")
 
 
+def _initial_for_causality(causality: str) -> str:
+    """Legal (causality, variability, initial) triple per FMI 2.0 (p.53)."""
+    if causality in ("input", "parameter"):
+        return "exact"
+    return "calculated"
+
+
 def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
     """Generate modelDescription.xml for the packaged Co-Simulation FMU.
 
@@ -71,31 +78,42 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
     var_elements: List[str] = []
     var_index = 1
     for var in mapping.all_variables():
-        vr = var_index
-        start_str = f' start="{var.start}"' if var.start is not None else ""
+        vr = var.wrapper_value_reference or var_index
+        causality = var.causality
+        variability = _variability_for_causality(causality)
+        initial = _initial_for_causality(causality)
+
+        var_type = var.variable_type or "Real"
+        start_val = var.start
+        if start_val is None and causality in ("input", "parameter"):
+            # FMI 2.0 p.53: inputs/parameters carry a start value.
+            start_val = 0 if var_type != "String" else ""
+
         unit_str = f' unit="{escape(var.unit)}"' if var.unit else ""
         desc_str = f' description="{escape(var.description)}"' if var.description else ""
 
-        # Determine XML type element based on variable type
-        var_type = var.variable_type or "Real"
         if var_type == "Integer":
+            start_str = f' start="{int(start_val)}"' if start_val is not None else ""
             type_elem = f"<Integer{start_str} />"
         elif var_type == "Boolean":
-            start_b = ""
-            if var.start is not None:
-                start_b = f' start="{"true" if var.start else "false"}"'
-            type_elem = f"<Boolean{start_b} />"
+            start_str = ""
+            if start_val is not None:
+                start_str = f' start="{"true" if start_val else "false"}"'
+            type_elem = f"<Boolean{start_str} />"
         elif var_type == "String":
+            start_str = f' start="{escape(str(start_val))}"' if start_val is not None else ""
             type_elem = f"<String{start_str} />"
         else:
+            start_str = f' start="{start_val}"' if start_val is not None else ""
             type_elem = f"<Real{start_str}{unit_str} />"
 
         elem = f"""
       <ScalarVariable
         name="{escape(var.wrapper_name)}"
         valueReference="{vr}"
-        causality="{var.causality}"
-        variability="{_variability_for_causality(var.causality)}"{desc_str}
+        causality="{causality}"
+        variability="{variability}"
+        initial="{initial}"{desc_str}
       >
         {type_elem}
       </ScalarVariable>"""
@@ -108,15 +126,17 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
     internal_fmus = ", ".join(sorted(spec.fmus.keys()))
     num_loops = len(mapping.algebraic_loops)
 
-    # Outputs section
+    # Outputs section — Unknown index refers to the 1-based ScalarVariable
+    # index, which equals the wrapper boundary value reference.
     output_elems = []
-    for idx, var in enumerate(mapping.wrapper_outputs, 1):
+    for var in mapping.wrapper_outputs:
+        idx = var.wrapper_value_reference or 0
         output_elems.append(
             f'      <Unknown index="{idx}" dependencies="" />'
         )
     outputs_section = "\n".join(output_elems)
 
-    # Connection annotations
+    # Connection annotations (VendorAnnotations -> Tool)
     conn_elems = []
     for conn in mapping.connections:
         conn_elems.append(
@@ -124,6 +144,25 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
             f'target="{conn.target_fmu}.{conn.target_variable}" />'
         )
     conn_section = "\n".join(conn_elems)
+
+    vendor_annotations = f"""  <VendorAnnotations>
+    <Tool name="cs-fmu-packager">
+      <CsFmuPackager
+        solverType="fixed_step"
+        solverStepSize="{spec.solver.step_size}"
+        communicationStepSize="{spec.wrapper.communication_step}"
+        internalFMUs="{escape(internal_fmus)}"
+        algebraicLoopCount="{num_loops}"
+        algebraicLoopMaxIterations="{spec.solver.algebraic_loop.max_iterations}"
+        algebraicLoopTolerance="{spec.solver.algebraic_loop.tolerance}"
+      >
+        <InternalConnections>
+          {conn_section}
+        </InternalConnections>
+      </CsFmuPackager>
+    </Tool>
+  </VendorAnnotations>
+"""
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <fmiModelDescription
@@ -144,30 +183,14 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
     canInterpolateInputs="false"
     canGetAndSetFMUstate="false"
     canSerializeFMUstate="false"
-    providesDirectionalDerivatives="false"
+    providesDirectionalDerivative="false"
     canRunAsynchronuously="false"
     canBeInstantiatedOnlyOncePerProcess="false"
     canNotUseMemoryManagementFunctions="false"
   >
-    <Annotations>
-      <Annotation name="cs-fmu-packager">
-        <Tool>
-          <CsFmuPackager
-            solverType="fixed_step"
-            solverStepSize="{spec.solver.step_size}"
-            communicationStepSize="{spec.wrapper.communication_step}"
-            internalFMUs="{escape(internal_fmus)}"
-            algebraicLoopCount="{num_loops}"
-            algebraicLoopMaxIterations="{spec.solver.algebraic_loop.max_iterations}"
-            algebraicLoopTolerance="{spec.solver.algebraic_loop.tolerance}"
-          />
-          <InternalConnections>
-            {conn_section}
-          </InternalConnections>
-        </Tool>
-      </Annotation>
-    </Annotations>
   </CoSimulation>
+
+  {vendor_annotations}
 
   <ModelVariables>
     {variables_section}
@@ -177,8 +200,6 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
     <Outputs>
       {outputs_section}
     </Outputs>
-    <InitialUnknowns>
-    </InitialUnknowns>
   </ModelStructure>
 </fmiModelDescription>
 """

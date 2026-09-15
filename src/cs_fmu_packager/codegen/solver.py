@@ -1,6 +1,7 @@
 """Generate solver_integration.c - SUNDIALS ARKODE fixed-step integrator."""
 from __future__ import annotations
 
+from cs_fmu_packager.codegen.fmi_interface import _continuous_states
 from cs_fmu_packager.models import MappingTable, PackageSpec
 
 
@@ -12,18 +13,15 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
     """
     fmu_name = spec.metadata.get("identifier", "cs_fmu")
     total_nx = sum(
-        len([v for v in fmu.variables
-             if v.causality == "local" and v.variability == "continuous"])
-        for fmu in mapping.fmus.values()
+        _continuous_states(fmu) for fmu in mapping.fmus.values()
     )
 
     fmu_entries = []
     for fmu_id in mapping.execution_order:
         fmu = mapping.fmus.get(fmu_id)
         if fmu:
-            nx = len([v for v in fmu.variables
-                     if v.causality == "local" and v.variability == "continuous"])
-            fmu_entries.append(f"    /* {fmu_id}: {fmu.model_name}, nx={nx} */")
+            nx = _continuous_states(fmu)
+            fmu_entries.append(f" *    {fmu_id}: {fmu.model_name}, nx={nx}")
 
     fmu_details = "\n".join(fmu_entries)
 
@@ -39,6 +37,8 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
 #include "fmi2_interface.h"
 #include "solver_integration.h"
 #include <sundials/sundials_types.h>
+#include <sundials/sundials_context.h>
+#include <arkode/arkode.h>
 #include <arkode/arkode_arkstep.h>
 #include <nvector/nvector_serial.h>
 #include <stdio.h>
@@ -51,7 +51,7 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
  * Computes the derivatives from all internal FMUs and concatenates them
  * into the single ARKODE state vector.
  * --------------------------------------------------------------------------- */
-static int combined_rhs(realtype t, N_Vector y, N_Vector ydot, void* user_data)
+static int combined_rhs(sunrealtype t, N_Vector y, N_Vector ydot, void* user_data)
 {{
     WrapperInstance* wrapper = (WrapperInstance*)user_data;
     double* y_data = N_VGetArrayPointer(y);
@@ -97,6 +97,14 @@ static int combined_rhs(realtype t, N_Vector y, N_Vector ydot, void* user_data)
  * --------------------------------------------------------------------------- */
 int solver_init(WrapperInstance* wrapper)
 {{
+    /* Create the SUNDIALS context (v7 API) */
+    SUNContext sunctx = NULL;
+    wrapper->sunctx = NULL;
+    if (SUNContext_Create(SUN_COMM_NULL, &sunctx) != 0) {{
+        return -1;
+    }}
+    wrapper->sunctx = (void*)sunctx;
+
     /* Count total continuous states */
     int total_nx = 0;
     for (int i = 0; i < wrapper->num_internal_fmus; i++) {{
@@ -108,7 +116,7 @@ int solver_init(WrapperInstance* wrapper)
     }}
 
     /* Create serial N_Vector for state */
-    wrapper->nv_state = (void*)N_VNew_Serial(total_nx);
+    wrapper->nv_state = (void*)N_VNew_Serial((sunindextype)total_nx, (SUNContext)wrapper->sunctx);
     if (wrapper->nv_state == NULL) {{
         return -1;
     }}
@@ -124,8 +132,11 @@ int solver_init(WrapperInstance* wrapper)
         offset += fmu->nx;
     }}
 
-    /* Create ARKStep memory (explicit RK for fixed-step) */
-    wrapper->arkode_mem = (void*)ARKStepCreate(NULL, combined_rhs, 0.0, (N_Vector)wrapper->nv_state);
+    /* Create ARKODE stepper.  Use the explicit part only (fixed-step
+     * explicit RK); a NULL implicit RHS avoids any non-linear solver setup. */
+    wrapper->arkode_mem = (void*)ARKStepCreate(combined_rhs, NULL, (sunrealtype)0.0,
+                                               (N_Vector)wrapper->nv_state,
+                                               (SUNContext)wrapper->sunctx);
     if (wrapper->arkode_mem == NULL) {{
         N_VDestroy((N_Vector)wrapper->nv_state);
         wrapper->nv_state = NULL;
@@ -133,10 +144,10 @@ int solver_init(WrapperInstance* wrapper)
     }}
 
     /* Set fixed step size */
-    ARKStepSetFixedStep(wrapper->arkode_mem, wrapper->step_size);
+    ARKodeSetFixedStep(wrapper->arkode_mem, (sunrealtype)wrapper->step_size);
 
     /* Attach user data */
-    ARKStepSetUserData(wrapper->arkode_mem, wrapper);
+    ARKodeSetUserData(wrapper->arkode_mem, wrapper);
 
     /* Allocate derivative buffer */
     wrapper->derivatives = (double*)calloc(total_nx, sizeof(double));
@@ -157,8 +168,9 @@ int solver_step(WrapperInstance* wrapper, double t0, double h)
         return 0;
     }}
 
-    realtype t_ret = t0;
-    int flag = ARKStepEvolve(wrapper->arkode_mem, t0 + h, (N_Vector)wrapper->nv_state, &t_ret, ARK_NORMAL);
+    sunrealtype t_ret = (sunrealtype)t0;
+    int flag = ARKodeEvolve(wrapper->arkode_mem, (sunrealtype)(t0 + h),
+                            (N_Vector)wrapper->nv_state, &t_ret, ARK_NORMAL);
 
     if (flag < 0) {{
         return -1;
@@ -185,7 +197,7 @@ int solver_step(WrapperInstance* wrapper, double t0, double h)
 void solver_free(WrapperInstance* wrapper)
 {{
     if (wrapper->arkode_mem) {{
-        ARKStepFree(&wrapper->arkode_mem);
+        ARKodeFree(&wrapper->arkode_mem);
         wrapper->arkode_mem = NULL;
     }}
     if (wrapper->nv_state) {{
@@ -195,6 +207,10 @@ void solver_free(WrapperInstance* wrapper)
     if (wrapper->derivatives) {{
         free(wrapper->derivatives);
         wrapper->derivatives = NULL;
+    }}
+    if (wrapper->sunctx) {{
+        SUNContext_Free((SUNContext*)&wrapper->sunctx);
+        wrapper->sunctx = NULL;
     }}
 }}
 """

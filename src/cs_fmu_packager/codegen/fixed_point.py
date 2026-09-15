@@ -70,14 +70,14 @@ int fixed_point_solve_loop(
             double src_value = 0.0;
 
             /* Get source variable value */
-            InternalFMU* src_fmu = (InternalFMU*)connections_src[c].internal_fmu;
+            InternalFMU* src_fmu = (InternalFMU*)connections_src[c].fmu;
             if (src_fmu && src_fmu->getReal) {{
                 fmi2ValueReference vr = connections_src[c].vr;
                 src_fmu->getReal(src_fmu->component, &vr, 1, &src_value);
             }}
 
             /* Set target variable value */
-            InternalFMU* tgt_fmu = (InternalFMU*)connections_tgt[c].internal_fmu;
+            InternalFMU* tgt_fmu = (InternalFMU*)connections_tgt[c].fmu;
             if (tgt_fmu && tgt_fmu->setReal) {{
                 fmi2ValueReference vr = connections_tgt[c].vr;
                 tgt_fmu->setReal(tgt_fmu->component, &vr, 1, &src_value);

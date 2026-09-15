@@ -16,3 +16,4 @@ __pycache__/
 index.html
 
 venv/
+.venv/

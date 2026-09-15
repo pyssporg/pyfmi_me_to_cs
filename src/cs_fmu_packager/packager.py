@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import zipfile
@@ -35,6 +36,15 @@ def _make_zip_info(name: str) -> zipfile.ZipInfo:
     return info
 
 
+def _model_identifier_for(mapping: MappingTable, fmu_id: str) -> Optional[str]:
+    """Return the model identifier of an internal FMU from the mapping."""
+    fmu_doc = mapping.fmus.get(fmu_id)
+    caps = fmu_doc.capabilities if fmu_doc else None
+    if caps is not None and getattr(caps, "model_identifier", None):
+        return caps.model_identifier
+    return None
+
+
 def _compute_checksum(path: str) -> str:
     """Compute SHA-256 checksum of a file."""
     h = hashlib.sha256()
@@ -42,6 +52,52 @@ def _compute_checksum(path: str) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _inner_model_identifier(path: str) -> Optional[str]:
+    """Return the ``modelIdentifier`` of an internal ME FMU.
+
+    The generated wrapper dlopens ``resources/<id>/binaries/linux64/
+    <model_identifier>.so``, so the packager must embed the internal shared
+    library under exactly that name (IMP-028).
+    """
+    try:
+        with zipfile.ZipFile(path) as zf:
+            xml = zf.read("modelDescription.xml").decode("utf-8", "replace")
+    except (zipfile.BadZipFile, KeyError):
+        return None
+    match = re.search(r'modelIdentifier\s*=\s*"([^"]+)"', xml)
+    return match.group(1) if match else None
+
+
+def _iter_inner_fmu_runtime_files(path: str, model_identifier: Optional[str] = None):
+    """Yield ``(archive_name, bytes)`` for the runtime payload of an
+    internal ME FMU (its ``binaries/`` and ``resources/`` subtrees).
+
+    The generated wrapper ``dlopen``s the internal FMU shared library at
+    ``resources/<fmu_id>/binaries/linux64/<model_identifier>.so`` (IMP-028),
+    so the packaged outer FMU must ship those trees pre-extracted.  The
+    shared library inside ``binaries/linux64/`` is normalised to the inner
+    FMU's ``modelIdentifier`` so the dlopen path always resolves.
+    """
+    mi = model_identifier or _inner_model_identifier(path)
+    try:
+        with zipfile.ZipFile(path) as zf:
+            for name in zf.namelist():
+                if name.startswith("binaries/") or name.startswith("resources/"):
+                    if (
+                        mi
+                        and name.startswith("binaries/linux64/")
+                        and name.endswith(".so")
+                    ):
+                        renames = f"binaries/linux64/{mi}.so"
+                        yield renames, zf.read(name)
+                    else:
+                        yield name, zf.read(name)
+    except zipfile.BadZipFile as e:
+        raise PackagingError(
+            f"Internal FMU '{path}' is not a valid ZIP archive: {e}"
+        ) from e
 
 
 def _assemble_fmu_via_pyssp(
@@ -89,8 +145,31 @@ def _assemble_fmu_via_pyssp(
 
             # Open in append mode to add resources and set generation date/time
             with FMU(output_path, mode="a") as fmu:
-                for fmu_id, fmu_ref in spec.fmus.items():
-                    fmu.add_resource(fmu_ref.path, target_name=f"{fmu_id}.fmu")
+                tmp_inner_dir = tempfile.mkdtemp()
+                try:
+                    for fmu_id, fmu_ref in spec.fmus.items():
+                        fmu.add_resource(
+                            fmu_ref.path, target_name=f"{fmu_id}.fmu"
+                        )
+                        # IMP-028: embed pre-extracted runtime payload
+                        # (binaries/, resources/) for dlopen at wrapper init.
+                        for (inner_name, inner_bytes) in _iter_inner_fmu_runtime_files(
+                            fmu_ref.path,
+                            model_identifier=_model_identifier_for(mapping, fmu_id),
+                        ):
+                            tmp_path = os.path.join(
+                                tmp_inner_dir,
+                                f"{fmu_id}_{inner_name.replace('/', '_')}",
+                            )
+                            with open(tmp_path, "wb") as f:
+                                f.write(inner_bytes)
+                            fmu.add_resource(
+                                tmp_path,
+                                target_name=f"{fmu_id}/{inner_name}",
+                            )
+                            os.unlink(tmp_path)
+                finally:
+                    shutil.rmtree(tmp_inner_dir, ignore_errors=True)
                 fmu.set_generation_date_and_time(date_time)
         finally:
             shutil.rmtree(tmp_so_dir, ignore_errors=True)
@@ -166,6 +245,17 @@ def assemble_fmu(
                     info = _make_zip_info(resource_target)
                     with open(fmu_ref.path, "rb") as f:
                         zf.writestr(info, f.read())
+
+                    # IMP-028: also embed the pre-extracted runtime payload
+                    # (binaries/, resources/) so the generated wrapper can
+                    # dlopen each internal FMU without a zip-extraction step.
+                    for (inner_name, inner_bytes) in _iter_inner_fmu_runtime_files(
+                        fmu_ref.path,
+                        model_identifier=_model_identifier_for(mapping, fmu_id),
+                    ):
+                        target = f"resources/{fmu_id}/{inner_name}"
+                        info = _make_zip_info(target)
+                        zf.writestr(info, inner_bytes)
 
         except (OSError, zipfile.BadZipFile) as e:
             raise PackagingError(f"Failed to create FMU archive: {e}") from e

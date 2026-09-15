@@ -112,6 +112,10 @@ class MappedVariable:
     variable_type: str  # "Real", "Integer", "Boolean", "String"
     causality: str  # "input", "output", "parameter"
 
+    # Value reference exposed at the wrapper boundary (modelDescription.xml).
+    # Assigned deterministically (1..N across all wrapper variables).
+    wrapper_value_reference: Optional[int] = None
+
     # For inputs/parameters: target is the FMU variable to set
     target_fmu: Optional[str] = None
     target_variable: Optional[str] = None

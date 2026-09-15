@@ -13,145 +13,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <dlfcn.h>
 #include <math.h>
-
-/* ---------------------------------------------------------------------------
- * Type definitions for function pointers (from fmi2FunctionTypes.h)
- * --------------------------------------------------------------------------- */
-typedef fmi2Component (*fmi2InstantiateME_f)(fmi2String, fmi2Type, fmi2String,
-                                              fmi2String, const fmi2CallbackFunctions*,
-                                              fmi2Boolean, fmi2Boolean);
-typedef void          (*fmi2FreeInstance_f)(fmi2Component);
-typedef fmi2Status    (*fmi2SetReal_f)(fmi2Component, const fmi2ValueReference[], size_t, const fmi2Real[]);
-typedef fmi2Status    (*fmi2GetReal_f)(fmi2Component, const fmi2ValueReference[], size_t, fmi2Real[]);
-typedef fmi2Status    (*fmi2SetInteger_f)(fmi2Component, const fmi2ValueReference[], size_t, const fmi2Integer[]);
-typedef fmi2Status    (*fmi2GetInteger_f)(fmi2Component, const fmi2ValueReference[], size_t, fmi2Integer[]);
-typedef fmi2Status    (*fmi2SetBoolean_f)(fmi2Component, const fmi2ValueReference[], size_t, const fmi2Boolean[]);
-typedef fmi2Status    (*fmi2GetBoolean_f)(fmi2Component, const fmi2ValueReference[], size_t, fmi2Boolean[]);
-typedef fmi2Status    (*fmi2SetString_f)(fmi2Component, const fmi2ValueReference[], size_t, const fmi2String[]);
-typedef fmi2Status    (*fmi2GetString_f)(fmi2Component, const fmi2ValueReference[], size_t, fmi2String[]);
-typedef fmi2Status    (*fmi2SetTime_f)(fmi2Component, fmi2Real);
-typedef fmi2Status    (*fmi2SetContinuousStates_f)(fmi2Component, const fmi2Real[], size_t);
-typedef fmi2Status    (*fmi2GetDerivatives_f)(fmi2Component, fmi2Real[], size_t);
-typedef fmi2Status    (*fmi2GetContinuousStates_f)(fmi2Component, fmi2Real[], size_t);
-typedef fmi2Status    (*fmi2EnterInitializationMode_f)(fmi2Component);
-typedef fmi2Status    (*fmi2Terminate_f)(fmi2Component);
-typedef fmi2Status    (*fmi2SetupExperiment_f)(fmi2Component, fmi2Boolean, fmi2Real, fmi2Real, fmi2Boolean, fmi2Real);
-
-/* ---------------------------------------------------------------------------
- * Struct: WrapperState
- * --------------------------------------------------------------------------- */
-typedef enum {
-    WrapperState_Instantiated,
-    WrapperState_InitializationMode,
-    WrapperState_StepComplete,
-    WrapperState_StepInProgress,
-    WrapperState_Terminated,
-    WrapperState_Error
-} WrapperState;
-
-/* ---------------------------------------------------------------------------
- * Struct: InternalFMU (per internal FMU)
- * --------------------------------------------------------------------------- */
-typedef struct {
-    void* libHandle;
-    fmi2InstantiateME_f instantiateME;
-    fmi2SetReal_f setReal;
-    fmi2GetReal_f getReal;
-    fmi2GetDerivatives_f getDerivatives;
-    fmi2SetTime_f setTime;
-    fmi2SetContinuousStates_f setContinuousStates;
-    fmi2GetContinuousStates_f getContinuousStates;
-    fmi2EnterInitializationMode_f initialize;
-    fmi2Terminate_f terminate;
-    fmi2FreeInstance_f freeInstance;
-    fmi2SetInteger_f setInteger;
-    fmi2GetInteger_f getInteger;
-    fmi2SetBoolean_f setBoolean;
-    fmi2GetBoolean_f getBoolean;
-    fmi2SetString_f setString;
-    fmi2GetString_f getString;
-    int nx;
-    fmi2Component component;
-    char instance_name[256];
-    fmi2Real* state_vector;
-} InternalFMU;
-
-/* ---------------------------------------------------------------------------
- * Struct: VariableMapping
- * --------------------------------------------------------------------------- */
-typedef struct {
-    fmi2ValueReference vr;
-    union {
-        fmi2Real r;
-        fmi2Integer i;
-        fmi2Boolean b;
-        fmi2String s;
-    } value;
-    InternalFMU* fmu;
-} VariableMapping;
-
-/* ---------------------------------------------------------------------------
- * Struct: WrapperInstance (per-instance state)
- * --------------------------------------------------------------------------- */
-typedef struct {
-    WrapperState state;
-    char instance_name[256];
-    const fmi2CallbackFunctions* callbacks;
-    fmi2Real current_time;
-    fmi2Real communication_step;
-    fmi2Real step_size;
-    int algebraic_loop_max_iterations;
-    double algebraic_loop_tolerance;
-    int num_algebraic_loops;
-
-    /* Internal FMU array */
-    int num_internal_fmus;
-    InternalFMU* internal_fmus;
-
-    /* Real variable mappings */
-    int num_real_inputs;
-    VariableMapping* real_inputs;
-    int num_real_outputs;
-    VariableMapping* real_outputs;
-    int num_real_params;
-    VariableMapping* real_params;
-
-    /* Integer variable mappings */
-    int num_int_inputs;
-    VariableMapping* int_inputs;
-    int num_int_outputs;
-    VariableMapping* int_outputs;
-    int num_int_params;
-    VariableMapping* int_params;
-
-    /* Boolean variable mappings */
-    int num_bool_inputs;
-    VariableMapping* bool_inputs;
-    int num_bool_outputs;
-    VariableMapping* bool_outputs;
-    int num_bool_params;
-    VariableMapping* bool_params;
-
-    /* String variable mappings */
-    int num_string_inputs;
-    VariableMapping* string_inputs;
-    int num_string_outputs;
-    VariableMapping* string_outputs;
-    int num_string_params;
-    VariableMapping* string_params;
-
-    /* Connection routing arrays */
-    int num_connections;
-    VariableMapping* connections_src;
-    VariableMapping* connections_tgt;
-
-    /* Solver state */
-    void* arkode_mem;
-    void* nv_state;
-    double* derivatives;
-} WrapperInstance;
 
 /* ---------------------------------------------------------------------------
  * Internal FMU dynamic loading helpers
@@ -161,11 +25,16 @@ typedef struct {
 /* ---------------------------------------------------------------------------
  * Helper: log message through callbacks
  * --------------------------------------------------------------------------- */
-static void log_message(WrapperInstance* inst, fmi2Status status, const char* category, const char* msg)
+static void log_message(WrapperInstance* inst, fmi2Status status, const char* category, const char* fmt, ...)
 {
     if (inst && inst->callbacks && inst->callbacks->logger) {
+        char buffer[1024];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buffer, sizeof(buffer), fmt, args);
+        va_end(args);
         inst->callbacks->logger(inst->callbacks->componentEnvironment,
-                                inst->instance_name, status, category, msg);
+                                inst->instance_name, status, category, buffer);
     }
 }
 
@@ -201,7 +70,7 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
         return NULL;
     }
 
-    if (strcmp(fmuGUID, "default-guid") != 0) {
+    if (strcmp(fmuGUID, "b9a57e5a-a88d-075d-5fb3-2cb3d367c82a") != 0) {
         return NULL;
     }
 
@@ -224,25 +93,43 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
     inst->internal_fmus = (InternalFMU*)calloc(2, sizeof(InternalFMU));
     if (inst->internal_fmus == NULL) { free(inst); return NULL; }
 
-    /* FMU index constants */
-['    int idx_src = -1;', '    int idx_tgt = -1;']
-
     /* Load all internal FMUs */
     /* Load FMU: src */
     {
         InternalFMU* fmu = &inst->internal_fmus[0];
-        fmu->nx = 0;  /* will be set from getContinuousStates during init */
+        fmu->nx = 0;  /* continuous states from model description */
         strncpy(fmu->instance_name, "src", sizeof(fmu->instance_name) - 1);
 
-        /* Build path to the FMU shared library */
+        /* Build path to the FMU shared library.  Masters may pass the FMU
+         * root or its resources/ directory, and per FMI as a file:// URI
+         * which dlopen cannot use, so normalise to a plain root first.
+         * Internal FMU binaries live under resources/<id>/binaries/. */
+        char res_root[MAX_RESOURCE_PATH];
+        {
+            const char* src = (fmuResourceLocation != NULL) ? fmuResourceLocation : "";
+            if (strncmp(src, "file://", 7) == 0) src += 7;
+            size_t n = strlen(src);
+            while (n > 0 && src[n - 1] == '/') n--;
+            if (n >= 10 && strncmp(src + n - 10, "/resources", 10) == 0) n -= 10;
+            while (n > 0 && src[n - 1] == '/') n--;
+            if (n >= sizeof(res_root)) n = sizeof(res_root) - 1;
+            strncpy(res_root, src, n);
+            res_root[n] = '\0';
+        }
+
         char lib_path[MAX_RESOURCE_PATH];
-        snprintf(lib_path, sizeof(lib_path),
-                 "resources/%s/binaries/linux64/src_model.so", "src");
+        if (res_root[0] == '\0') {
+            snprintf(lib_path, sizeof(lib_path), "resources/%s/binaries/linux64/src_model.so",
+                     "src");
+        } else {
+            snprintf(lib_path, sizeof(lib_path), "%s/resources/%s/binaries/linux64/src_model.so",
+                     res_root, "src");
+        }
 
         fmu->libHandle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
         if (fmu->libHandle == NULL) {
             log_message(inst, fmi2Error, "init",
-                        "Failed to dlopen internal FMU '%s': %s", "src", dlerror());
+                        "Failed to dlopen internal FMU '%s' (%s): %s", "src", lib_path, dlerror());
             /* Cleanup already loaded FMUs */
             for (int k = 0; k < 0; k++) {
                 if (inst->internal_fmus[k].libHandle) dlclose(inst->internal_fmus[k].libHandle);
@@ -256,38 +143,40 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
         fmu->instantiateME = (fmi2InstantiateME_f)dlsym(fmu->libHandle, "fmi2Instantiate");
         if (fmu->instantiateME == NULL) {
             /* Try with modelIdentifier prefix */
-            fmu->instantiateME = (fmi2InstantiateME_f)dlsym(fmu->libHandle, "src_fmi2Instantiate");
+            fmu->instantiateME = (fmi2InstantiateME_f)dlsym(fmu->libHandle, "src_model_fmi2Instantiate");
         }
         fmu->setReal = (fmi2SetReal_f)dlsym(fmu->libHandle, "fmi2SetReal");
-        if (fmu->setReal == NULL) fmu->setReal = (fmi2SetReal_f)dlsym(fmu->libHandle, "src_fmi2SetReal");
+        if (fmu->setReal == NULL) fmu->setReal = (fmi2SetReal_f)dlsym(fmu->libHandle, "src_model_fmi2SetReal");
         fmu->getReal = (fmi2GetReal_f)dlsym(fmu->libHandle, "fmi2GetReal");
-        if (fmu->getReal == NULL) fmu->getReal = (fmi2GetReal_f)dlsym(fmu->libHandle, "src_fmi2GetReal");
+        if (fmu->getReal == NULL) fmu->getReal = (fmi2GetReal_f)dlsym(fmu->libHandle, "src_model_fmi2GetReal");
         fmu->getDerivatives = (fmi2GetDerivatives_f)dlsym(fmu->libHandle, "fmi2GetDerivatives");
-        if (fmu->getDerivatives == NULL) fmu->getDerivatives = (fmi2GetDerivatives_f)dlsym(fmu->libHandle, "src_fmi2GetDerivatives");
+        if (fmu->getDerivatives == NULL) fmu->getDerivatives = (fmi2GetDerivatives_f)dlsym(fmu->libHandle, "src_model_fmi2GetDerivatives");
         fmu->setTime = (fmi2SetTime_f)dlsym(fmu->libHandle, "fmi2SetTime");
-        if (fmu->setTime == NULL) fmu->setTime = (fmi2SetTime_f)dlsym(fmu->libHandle, "src_fmi2SetTime");
+        if (fmu->setTime == NULL) fmu->setTime = (fmi2SetTime_f)dlsym(fmu->libHandle, "src_model_fmi2SetTime");
         fmu->setContinuousStates = (fmi2SetContinuousStates_f)dlsym(fmu->libHandle, "fmi2SetContinuousStates");
-        if (fmu->setContinuousStates == NULL) fmu->setContinuousStates = (fmi2SetContinuousStates_f)dlsym(fmu->libHandle, "src_fmi2SetContinuousStates");
+        if (fmu->setContinuousStates == NULL) fmu->setContinuousStates = (fmi2SetContinuousStates_f)dlsym(fmu->libHandle, "src_model_fmi2SetContinuousStates");
         fmu->getContinuousStates = (fmi2GetContinuousStates_f)dlsym(fmu->libHandle, "fmi2GetContinuousStates");
-        if (fmu->getContinuousStates == NULL) fmu->getContinuousStates = (fmi2GetContinuousStates_f)dlsym(fmu->libHandle, "src_fmi2GetContinuousStates");
+        if (fmu->getContinuousStates == NULL) fmu->getContinuousStates = (fmi2GetContinuousStates_f)dlsym(fmu->libHandle, "src_model_fmi2GetContinuousStates");
         fmu->initialize = (fmi2EnterInitializationMode_f)dlsym(fmu->libHandle, "fmi2EnterInitializationMode");
-        if (fmu->initialize == NULL) fmu->initialize = (fmi2EnterInitializationMode_f)dlsym(fmu->libHandle, "src_fmi2EnterInitializationMode");
+        if (fmu->initialize == NULL) fmu->initialize = (fmi2EnterInitializationMode_f)dlsym(fmu->libHandle, "src_model_fmi2EnterInitializationMode");
+        fmu->exitInitialize = (fmi2ExitInitializationMode_f)dlsym(fmu->libHandle, "fmi2ExitInitializationMode");
+        if (fmu->exitInitialize == NULL) fmu->exitInitialize = (fmi2ExitInitializationMode_f)dlsym(fmu->libHandle, "src_model_fmi2ExitInitializationMode");
         fmu->terminate = (fmi2Terminate_f)dlsym(fmu->libHandle, "fmi2Terminate");
-        if (fmu->terminate == NULL) fmu->terminate = (fmi2Terminate_f)dlsym(fmu->libHandle, "src_fmi2Terminate");
+        if (fmu->terminate == NULL) fmu->terminate = (fmi2Terminate_f)dlsym(fmu->libHandle, "src_model_fmi2Terminate");
         fmu->freeInstance = (fmi2FreeInstance_f)dlsym(fmu->libHandle, "fmi2FreeInstance");
-        if (fmu->freeInstance == NULL) fmu->freeInstance = (fmi2FreeInstance_f)dlsym(fmu->libHandle, "src_fmi2FreeInstance");
+        if (fmu->freeInstance == NULL) fmu->freeInstance = (fmi2FreeInstance_f)dlsym(fmu->libHandle, "src_model_fmi2FreeInstance");
         fmu->setInteger = (fmi2SetInteger_f)dlsym(fmu->libHandle, "fmi2SetInteger");
-        if (fmu->setInteger == NULL) fmu->setInteger = (fmi2SetInteger_f)dlsym(fmu->libHandle, "src_fmi2SetInteger");
+        if (fmu->setInteger == NULL) fmu->setInteger = (fmi2SetInteger_f)dlsym(fmu->libHandle, "src_model_fmi2SetInteger");
         fmu->getInteger = (fmi2GetInteger_f)dlsym(fmu->libHandle, "fmi2GetInteger");
-        if (fmu->getInteger == NULL) fmu->getInteger = (fmi2GetInteger_f)dlsym(fmu->libHandle, "src_fmi2GetInteger");
+        if (fmu->getInteger == NULL) fmu->getInteger = (fmi2GetInteger_f)dlsym(fmu->libHandle, "src_model_fmi2GetInteger");
         fmu->setBoolean = (fmi2SetBoolean_f)dlsym(fmu->libHandle, "fmi2SetBoolean");
-        if (fmu->setBoolean == NULL) fmu->setBoolean = (fmi2SetBoolean_f)dlsym(fmu->libHandle, "src_fmi2SetBoolean");
+        if (fmu->setBoolean == NULL) fmu->setBoolean = (fmi2SetBoolean_f)dlsym(fmu->libHandle, "src_model_fmi2SetBoolean");
         fmu->getBoolean = (fmi2GetBoolean_f)dlsym(fmu->libHandle, "fmi2GetBoolean");
-        if (fmu->getBoolean == NULL) fmu->getBoolean = (fmi2GetBoolean_f)dlsym(fmu->libHandle, "src_fmi2GetBoolean");
+        if (fmu->getBoolean == NULL) fmu->getBoolean = (fmi2GetBoolean_f)dlsym(fmu->libHandle, "src_model_fmi2GetBoolean");
         fmu->setString = (fmi2SetString_f)dlsym(fmu->libHandle, "fmi2SetString");
-        if (fmu->setString == NULL) fmu->setString = (fmi2SetString_f)dlsym(fmu->libHandle, "src_fmi2SetString");
+        if (fmu->setString == NULL) fmu->setString = (fmi2SetString_f)dlsym(fmu->libHandle, "src_model_fmi2SetString");
         fmu->getString = (fmi2GetString_f)dlsym(fmu->libHandle, "fmi2GetString");
-        if (fmu->getString == NULL) fmu->getString = (fmi2GetString_f)dlsym(fmu->libHandle, "src_fmi2GetString");
+        if (fmu->getString == NULL) fmu->getString = (fmi2GetString_f)dlsym(fmu->libHandle, "src_model_fmi2GetString");
 
         if (fmu->instantiateME == NULL) {
             log_message(inst, fmi2Error, "init",
@@ -301,13 +190,20 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
             return NULL;
         }
 
-        /* Instantiate the internal FMU */
+        /* Instantiate the internal FMU with its own model identifier, GUID
+         * and resource location. */
+        char inner_res[MAX_RESOURCE_PATH];
+        if (res_root[0] == '\0') {
+            snprintf(inner_res, sizeof(inner_res), "resources/%s", "src");
+        } else {
+            snprintf(inner_res, sizeof(inner_res), "%s/resources/%s", res_root, "src");
+        }
         fmu->component = fmu->instantiateME(
             fmu->instance_name,
             fmi2ModelExchange,
-            "default-guid",
-            "resources",
-            NULL,
+            "{src-guid}",
+            inner_res,
+            inst->callbacks,
             fmi2False,
             fmi2False
         );
@@ -324,33 +220,50 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
             return NULL;
         }
 
-        /* Initialize the internal FMU */
+        /* Enter and exit initialization mode so the FMU is ready to step */
         if (fmu->initialize) {
             fmu->initialize(fmu->component);
         }
-
-        /* Get number of continuous states */
-        if (fmu->getContinuousStates) {
-            fmu2Real dummy[1];
-            fmu->getContinuousStates(fmu->component, dummy, 0);
-            /* nx known from model description, stored statically */
+        if (fmu->exitInitialize) {
+            fmu->exitInitialize(fmu->component);
         }
     }
     /* Load FMU: tgt */
     {
         InternalFMU* fmu = &inst->internal_fmus[1];
-        fmu->nx = 0;  /* will be set from getContinuousStates during init */
+        fmu->nx = 0;  /* continuous states from model description */
         strncpy(fmu->instance_name, "tgt", sizeof(fmu->instance_name) - 1);
 
-        /* Build path to the FMU shared library */
+        /* Build path to the FMU shared library.  Masters may pass the FMU
+         * root or its resources/ directory, and per FMI as a file:// URI
+         * which dlopen cannot use, so normalise to a plain root first.
+         * Internal FMU binaries live under resources/<id>/binaries/. */
+        char res_root[MAX_RESOURCE_PATH];
+        {
+            const char* src = (fmuResourceLocation != NULL) ? fmuResourceLocation : "";
+            if (strncmp(src, "file://", 7) == 0) src += 7;
+            size_t n = strlen(src);
+            while (n > 0 && src[n - 1] == '/') n--;
+            if (n >= 10 && strncmp(src + n - 10, "/resources", 10) == 0) n -= 10;
+            while (n > 0 && src[n - 1] == '/') n--;
+            if (n >= sizeof(res_root)) n = sizeof(res_root) - 1;
+            strncpy(res_root, src, n);
+            res_root[n] = '\0';
+        }
+
         char lib_path[MAX_RESOURCE_PATH];
-        snprintf(lib_path, sizeof(lib_path),
-                 "resources/%s/binaries/linux64/tgt_model.so", "tgt");
+        if (res_root[0] == '\0') {
+            snprintf(lib_path, sizeof(lib_path), "resources/%s/binaries/linux64/tgt_model.so",
+                     "tgt");
+        } else {
+            snprintf(lib_path, sizeof(lib_path), "%s/resources/%s/binaries/linux64/tgt_model.so",
+                     res_root, "tgt");
+        }
 
         fmu->libHandle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
         if (fmu->libHandle == NULL) {
             log_message(inst, fmi2Error, "init",
-                        "Failed to dlopen internal FMU '%s': %s", "tgt", dlerror());
+                        "Failed to dlopen internal FMU '%s' (%s): %s", "tgt", lib_path, dlerror());
             /* Cleanup already loaded FMUs */
             for (int k = 0; k < 1; k++) {
                 if (inst->internal_fmus[k].libHandle) dlclose(inst->internal_fmus[k].libHandle);
@@ -364,38 +277,40 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
         fmu->instantiateME = (fmi2InstantiateME_f)dlsym(fmu->libHandle, "fmi2Instantiate");
         if (fmu->instantiateME == NULL) {
             /* Try with modelIdentifier prefix */
-            fmu->instantiateME = (fmi2InstantiateME_f)dlsym(fmu->libHandle, "tgt_fmi2Instantiate");
+            fmu->instantiateME = (fmi2InstantiateME_f)dlsym(fmu->libHandle, "tgt_model_fmi2Instantiate");
         }
         fmu->setReal = (fmi2SetReal_f)dlsym(fmu->libHandle, "fmi2SetReal");
-        if (fmu->setReal == NULL) fmu->setReal = (fmi2SetReal_f)dlsym(fmu->libHandle, "tgt_fmi2SetReal");
+        if (fmu->setReal == NULL) fmu->setReal = (fmi2SetReal_f)dlsym(fmu->libHandle, "tgt_model_fmi2SetReal");
         fmu->getReal = (fmi2GetReal_f)dlsym(fmu->libHandle, "fmi2GetReal");
-        if (fmu->getReal == NULL) fmu->getReal = (fmi2GetReal_f)dlsym(fmu->libHandle, "tgt_fmi2GetReal");
+        if (fmu->getReal == NULL) fmu->getReal = (fmi2GetReal_f)dlsym(fmu->libHandle, "tgt_model_fmi2GetReal");
         fmu->getDerivatives = (fmi2GetDerivatives_f)dlsym(fmu->libHandle, "fmi2GetDerivatives");
-        if (fmu->getDerivatives == NULL) fmu->getDerivatives = (fmi2GetDerivatives_f)dlsym(fmu->libHandle, "tgt_fmi2GetDerivatives");
+        if (fmu->getDerivatives == NULL) fmu->getDerivatives = (fmi2GetDerivatives_f)dlsym(fmu->libHandle, "tgt_model_fmi2GetDerivatives");
         fmu->setTime = (fmi2SetTime_f)dlsym(fmu->libHandle, "fmi2SetTime");
-        if (fmu->setTime == NULL) fmu->setTime = (fmi2SetTime_f)dlsym(fmu->libHandle, "tgt_fmi2SetTime");
+        if (fmu->setTime == NULL) fmu->setTime = (fmi2SetTime_f)dlsym(fmu->libHandle, "tgt_model_fmi2SetTime");
         fmu->setContinuousStates = (fmi2SetContinuousStates_f)dlsym(fmu->libHandle, "fmi2SetContinuousStates");
-        if (fmu->setContinuousStates == NULL) fmu->setContinuousStates = (fmi2SetContinuousStates_f)dlsym(fmu->libHandle, "tgt_fmi2SetContinuousStates");
+        if (fmu->setContinuousStates == NULL) fmu->setContinuousStates = (fmi2SetContinuousStates_f)dlsym(fmu->libHandle, "tgt_model_fmi2SetContinuousStates");
         fmu->getContinuousStates = (fmi2GetContinuousStates_f)dlsym(fmu->libHandle, "fmi2GetContinuousStates");
-        if (fmu->getContinuousStates == NULL) fmu->getContinuousStates = (fmi2GetContinuousStates_f)dlsym(fmu->libHandle, "tgt_fmi2GetContinuousStates");
+        if (fmu->getContinuousStates == NULL) fmu->getContinuousStates = (fmi2GetContinuousStates_f)dlsym(fmu->libHandle, "tgt_model_fmi2GetContinuousStates");
         fmu->initialize = (fmi2EnterInitializationMode_f)dlsym(fmu->libHandle, "fmi2EnterInitializationMode");
-        if (fmu->initialize == NULL) fmu->initialize = (fmi2EnterInitializationMode_f)dlsym(fmu->libHandle, "tgt_fmi2EnterInitializationMode");
+        if (fmu->initialize == NULL) fmu->initialize = (fmi2EnterInitializationMode_f)dlsym(fmu->libHandle, "tgt_model_fmi2EnterInitializationMode");
+        fmu->exitInitialize = (fmi2ExitInitializationMode_f)dlsym(fmu->libHandle, "fmi2ExitInitializationMode");
+        if (fmu->exitInitialize == NULL) fmu->exitInitialize = (fmi2ExitInitializationMode_f)dlsym(fmu->libHandle, "tgt_model_fmi2ExitInitializationMode");
         fmu->terminate = (fmi2Terminate_f)dlsym(fmu->libHandle, "fmi2Terminate");
-        if (fmu->terminate == NULL) fmu->terminate = (fmi2Terminate_f)dlsym(fmu->libHandle, "tgt_fmi2Terminate");
+        if (fmu->terminate == NULL) fmu->terminate = (fmi2Terminate_f)dlsym(fmu->libHandle, "tgt_model_fmi2Terminate");
         fmu->freeInstance = (fmi2FreeInstance_f)dlsym(fmu->libHandle, "fmi2FreeInstance");
-        if (fmu->freeInstance == NULL) fmu->freeInstance = (fmi2FreeInstance_f)dlsym(fmu->libHandle, "tgt_fmi2FreeInstance");
+        if (fmu->freeInstance == NULL) fmu->freeInstance = (fmi2FreeInstance_f)dlsym(fmu->libHandle, "tgt_model_fmi2FreeInstance");
         fmu->setInteger = (fmi2SetInteger_f)dlsym(fmu->libHandle, "fmi2SetInteger");
-        if (fmu->setInteger == NULL) fmu->setInteger = (fmi2SetInteger_f)dlsym(fmu->libHandle, "tgt_fmi2SetInteger");
+        if (fmu->setInteger == NULL) fmu->setInteger = (fmi2SetInteger_f)dlsym(fmu->libHandle, "tgt_model_fmi2SetInteger");
         fmu->getInteger = (fmi2GetInteger_f)dlsym(fmu->libHandle, "fmi2GetInteger");
-        if (fmu->getInteger == NULL) fmu->getInteger = (fmi2GetInteger_f)dlsym(fmu->libHandle, "tgt_fmi2GetInteger");
+        if (fmu->getInteger == NULL) fmu->getInteger = (fmi2GetInteger_f)dlsym(fmu->libHandle, "tgt_model_fmi2GetInteger");
         fmu->setBoolean = (fmi2SetBoolean_f)dlsym(fmu->libHandle, "fmi2SetBoolean");
-        if (fmu->setBoolean == NULL) fmu->setBoolean = (fmi2SetBoolean_f)dlsym(fmu->libHandle, "tgt_fmi2SetBoolean");
+        if (fmu->setBoolean == NULL) fmu->setBoolean = (fmi2SetBoolean_f)dlsym(fmu->libHandle, "tgt_model_fmi2SetBoolean");
         fmu->getBoolean = (fmi2GetBoolean_f)dlsym(fmu->libHandle, "fmi2GetBoolean");
-        if (fmu->getBoolean == NULL) fmu->getBoolean = (fmi2GetBoolean_f)dlsym(fmu->libHandle, "tgt_fmi2GetBoolean");
+        if (fmu->getBoolean == NULL) fmu->getBoolean = (fmi2GetBoolean_f)dlsym(fmu->libHandle, "tgt_model_fmi2GetBoolean");
         fmu->setString = (fmi2SetString_f)dlsym(fmu->libHandle, "fmi2SetString");
-        if (fmu->setString == NULL) fmu->setString = (fmi2SetString_f)dlsym(fmu->libHandle, "tgt_fmi2SetString");
+        if (fmu->setString == NULL) fmu->setString = (fmi2SetString_f)dlsym(fmu->libHandle, "tgt_model_fmi2SetString");
         fmu->getString = (fmi2GetString_f)dlsym(fmu->libHandle, "fmi2GetString");
-        if (fmu->getString == NULL) fmu->getString = (fmi2GetString_f)dlsym(fmu->libHandle, "tgt_fmi2GetString");
+        if (fmu->getString == NULL) fmu->getString = (fmi2GetString_f)dlsym(fmu->libHandle, "tgt_model_fmi2GetString");
 
         if (fmu->instantiateME == NULL) {
             log_message(inst, fmi2Error, "init",
@@ -409,13 +324,20 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
             return NULL;
         }
 
-        /* Instantiate the internal FMU */
+        /* Instantiate the internal FMU with its own model identifier, GUID
+         * and resource location. */
+        char inner_res[MAX_RESOURCE_PATH];
+        if (res_root[0] == '\0') {
+            snprintf(inner_res, sizeof(inner_res), "resources/%s", "tgt");
+        } else {
+            snprintf(inner_res, sizeof(inner_res), "%s/resources/%s", res_root, "tgt");
+        }
         fmu->component = fmu->instantiateME(
             fmu->instance_name,
             fmi2ModelExchange,
-            "default-guid",
-            "resources",
-            NULL,
+            "{tgt-guid}",
+            inner_res,
+            inst->callbacks,
             fmi2False,
             fmi2False
         );
@@ -432,21 +354,14 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
             return NULL;
         }
 
-        /* Initialize the internal FMU */
+        /* Enter and exit initialization mode so the FMU is ready to step */
         if (fmu->initialize) {
             fmu->initialize(fmu->component);
         }
-
-        /* Get number of continuous states */
-        if (fmu->getContinuousStates) {
-            fmu2Real dummy[1];
-            fmu->getContinuousStates(fmu->component, dummy, 0);
-            /* nx known from model description, stored statically */
+        if (fmu->exitInitialize) {
+            fmu->exitInitialize(fmu->component);
         }
     }
-
-    /* Populate FMU index assignments */
-['    idx_src = 0;', '    idx_tgt = 1;']
 
     /* Allocate variable mapping arrays */
     inst->num_real_inputs = 1;
@@ -482,42 +397,66 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
 
     /* Populate variable mapping arrays */
     if (1 > 0) {
-        inst->real_inputs[0].vr = 0;
+        inst->real_inputs[0].vr = 1;
+        inst->real_inputs[0].internal_vr = 0;
+        inst->real_inputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
         inst->int_inputs[0].vr = 1;
+        inst->int_inputs[0].internal_vr = 1;
+        inst->int_inputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->bool_inputs[0].vr = 2;
+        inst->bool_inputs[0].vr = 1;
+        inst->bool_inputs[0].internal_vr = 2;
+        inst->bool_inputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->string_inputs[0].vr = 3;
+        inst->string_inputs[0].vr = 1;
+        inst->string_inputs[0].internal_vr = 3;
+        inst->string_inputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->real_outputs[0].vr = 10;
+        inst->real_outputs[0].vr = 1;
+        inst->real_outputs[0].internal_vr = 10;
+        inst->real_outputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->int_outputs[0].vr = 11;
+        inst->int_outputs[0].vr = 1;
+        inst->int_outputs[0].internal_vr = 11;
+        inst->int_outputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->bool_outputs[0].vr = 12;
+        inst->bool_outputs[0].vr = 1;
+        inst->bool_outputs[0].internal_vr = 12;
+        inst->bool_outputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->string_outputs[0].vr = 13;
+        inst->string_outputs[0].vr = 1;
+        inst->string_outputs[0].internal_vr = 13;
+        inst->string_outputs[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->real_params[0].vr = 20;
+        inst->real_params[0].vr = 1;
+        inst->real_params[0].internal_vr = 20;
+        inst->real_params[0].fmu = &inst->internal_fmus[0];
     }
     if (1 > 0) {
-        inst->int_params[0].vr = 21;
+        inst->int_params[0].vr = 1;
+        inst->int_params[0].internal_vr = 21;
+        inst->int_params[0].fmu = &inst->internal_fmus[0];
         inst->int_params[0].value.i = 99;
     }
     if (1 > 0) {
-        inst->bool_params[0].vr = 22;
+        inst->bool_params[0].vr = 1;
+        inst->bool_params[0].internal_vr = 22;
+        inst->bool_params[0].fmu = &inst->internal_fmus[0];
         inst->bool_params[0].value.b = fmi2True;
     }
     if (1 > 0) {
-        inst->string_params[0].vr = 23;
+        inst->string_params[0].vr = 1;
+        inst->string_params[0].internal_vr = 23;
+        inst->string_params[0].fmu = &inst->internal_fmus[0];
         inst->string_params[0].value.s = strdup("default");
     }
 
@@ -665,7 +604,7 @@ FMI2_Export fmi2Status fmi2SetReal(fmi2Component c, const fmi2ValueReference vr[
                 /* Propagate to internal FMU if connected */
                 if (inst->real_inputs[j].fmu) {
                     InternalFMU* fmu = (InternalFMU*)inst->real_inputs[j].fmu;
-                    fmi2ValueReference tgt_vr = inst->real_inputs[j].vr;
+                    fmi2ValueReference tgt_vr = inst->real_inputs[j].internal_vr;
                     fmu->setReal(fmu->component, &tgt_vr, 1, &value[i]);
                 }
                 break;
@@ -679,7 +618,7 @@ FMI2_Export fmi2Status fmi2SetReal(fmi2Component c, const fmi2ValueReference vr[
                     inst->real_params[j].value.r = value[i];
                     if (inst->real_params[j].fmu) {
                         InternalFMU* fmu = (InternalFMU*)inst->real_params[j].fmu;
-                        fmi2ValueReference tgt_vr = inst->real_params[j].vr;
+                        fmi2ValueReference tgt_vr = inst->real_params[j].internal_vr;
                         fmu->setReal(fmu->component, &tgt_vr, 1, &value[i]);
                     }
                     found = 1;
@@ -765,7 +704,7 @@ FMI2_Export fmi2Status fmi2SetInteger(fmi2Component c, const fmi2ValueReference 
                 found = 1;
                 if (inst->int_inputs[j].fmu) {
                     InternalFMU* fmu = (InternalFMU*)inst->int_inputs[j].fmu;
-                    fmi2ValueReference tgt_vr = inst->int_inputs[j].vr;
+                    fmi2ValueReference tgt_vr = inst->int_inputs[j].internal_vr;
                     fmu->setInteger(fmu->component, &tgt_vr, 1, &value[i]);
                 }
                 break;
@@ -778,7 +717,7 @@ FMI2_Export fmi2Status fmi2SetInteger(fmi2Component c, const fmi2ValueReference 
                     inst->int_params[j].value.i = value[i];
                     if (inst->int_params[j].fmu) {
                         InternalFMU* fmu = (InternalFMU*)inst->int_params[j].fmu;
-                        fmi2ValueReference tgt_vr = inst->int_params[j].vr;
+                        fmi2ValueReference tgt_vr = inst->int_params[j].internal_vr;
                         fmu->setInteger(fmu->component, &tgt_vr, 1, &value[i]);
                     }
                     found = 1;
@@ -804,7 +743,7 @@ FMI2_Export fmi2Status fmi2SetBoolean(fmi2Component c, const fmi2ValueReference 
                 found = 1;
                 if (inst->bool_inputs[j].fmu) {
                     InternalFMU* fmu = (InternalFMU*)inst->bool_inputs[j].fmu;
-                    fmi2ValueReference tgt_vr = inst->bool_inputs[j].vr;
+                    fmi2ValueReference tgt_vr = inst->bool_inputs[j].internal_vr;
                     fmu->setBoolean(fmu->component, &tgt_vr, 1, &value[i]);
                 }
                 break;
@@ -817,7 +756,7 @@ FMI2_Export fmi2Status fmi2SetBoolean(fmi2Component c, const fmi2ValueReference 
                     inst->bool_params[j].value.b = value[i];
                     if (inst->bool_params[j].fmu) {
                         InternalFMU* fmu = (InternalFMU*)inst->bool_params[j].fmu;
-                        fmi2ValueReference tgt_vr = inst->bool_params[j].vr;
+                        fmi2ValueReference tgt_vr = inst->bool_params[j].internal_vr;
                         fmu->setBoolean(fmu->component, &tgt_vr, 1, &value[i]);
                     }
                     found = 1;
@@ -847,7 +786,7 @@ FMI2_Export fmi2Status fmi2SetString(fmi2Component c, const fmi2ValueReference v
                 found = 1;
                 if (inst->string_inputs[j].fmu) {
                     InternalFMU* fmu = (InternalFMU*)inst->string_inputs[j].fmu;
-                    fmi2ValueReference tgt_vr = inst->string_inputs[j].vr;
+                    fmi2ValueReference tgt_vr = inst->string_inputs[j].internal_vr;
                     fmu->setString(fmu->component, &tgt_vr, 1, &value[i]);
                 }
                 break;
@@ -863,7 +802,7 @@ FMI2_Export fmi2Status fmi2SetString(fmi2Component c, const fmi2ValueReference v
                     inst->string_params[j].value.s = strdup(value[i]);
                     if (inst->string_params[j].fmu) {
                         InternalFMU* fmu = (InternalFMU*)inst->string_params[j].fmu;
-                        fmi2ValueReference tgt_vr = inst->string_params[j].vr;
+                        fmi2ValueReference tgt_vr = inst->string_params[j].internal_vr;
                         fmu->setString(fmu->component, &tgt_vr, 1, &value[i]);
                     }
                     found = 1;
@@ -956,7 +895,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_real_inputs; i++) {
             if (inst->real_inputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->real_inputs[i].fmu;
-                fmi2ValueReference vr = inst->real_inputs[i].vr;
+                fmi2ValueReference vr = inst->real_inputs[i].internal_vr;
                 fmi2Real val = inst->real_inputs[i].value.r;
                 fmu->setReal(fmu->component, &vr, 1, &val);
             }
@@ -965,7 +904,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_int_inputs; i++) {
             if (inst->int_inputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->int_inputs[i].fmu;
-                fmi2ValueReference vr = inst->int_inputs[i].vr;
+                fmi2ValueReference vr = inst->int_inputs[i].internal_vr;
                 fmi2Integer val = inst->int_inputs[i].value.i;
                 fmu->setInteger(fmu->component, &vr, 1, &val);
             }
@@ -974,7 +913,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_bool_inputs; i++) {
             if (inst->bool_inputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->bool_inputs[i].fmu;
-                fmi2ValueReference vr = inst->bool_inputs[i].vr;
+                fmi2ValueReference vr = inst->bool_inputs[i].internal_vr;
                 fmi2Boolean val = inst->bool_inputs[i].value.b;
                 fmu->setBoolean(fmu->component, &vr, 1, &val);
             }
@@ -983,7 +922,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_string_inputs; i++) {
             if (inst->string_inputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->string_inputs[i].fmu;
-                fmi2ValueReference vr = inst->string_inputs[i].vr;
+                fmi2ValueReference vr = inst->string_inputs[i].internal_vr;
                 fmi2String val = inst->string_inputs[i].value.s;
                 fmu->setString(fmu->component, &vr, 1, &val);
             }
@@ -1018,7 +957,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_real_outputs; i++) {
             if (inst->real_outputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->real_outputs[i].fmu;
-                fmi2ValueReference vr = inst->real_outputs[i].vr;
+                fmi2ValueReference vr = inst->real_outputs[i].internal_vr;
                 fmu->getReal(fmu->component, &vr, 1, &inst->real_outputs[i].value.r);
             }
         }
@@ -1026,7 +965,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_int_outputs; i++) {
             if (inst->int_outputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->int_outputs[i].fmu;
-                fmi2ValueReference vr = inst->int_outputs[i].vr;
+                fmi2ValueReference vr = inst->int_outputs[i].internal_vr;
                 fmu->getInteger(fmu->component, &vr, 1, &inst->int_outputs[i].value.i);
             }
         }
@@ -1034,7 +973,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_bool_outputs; i++) {
             if (inst->bool_outputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->bool_outputs[i].fmu;
-                fmi2ValueReference vr = inst->bool_outputs[i].vr;
+                fmi2ValueReference vr = inst->bool_outputs[i].internal_vr;
                 fmu->getBoolean(fmu->component, &vr, 1, &inst->bool_outputs[i].value.b);
             }
         }
@@ -1042,7 +981,7 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         for (int i = 0; i < inst->num_string_outputs; i++) {
             if (inst->string_outputs[i].fmu) {
                 InternalFMU* fmu = (InternalFMU*)inst->string_outputs[i].fmu;
-                fmi2ValueReference vr = inst->string_outputs[i].vr;
+                fmi2ValueReference vr = inst->string_outputs[i].internal_vr;
                 fmu->getString(fmu->component, &vr, 1, &inst->string_outputs[i].value.s);
             }
         }

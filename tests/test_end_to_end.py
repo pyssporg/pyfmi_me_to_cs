@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -260,3 +263,189 @@ class TestBuildReport:
             assert "Test warning" in data["warnings"]
             assert data["fmu_guids"]["a"] == "{guid-a}"
             assert "inp" in data["wrapper_variables"]
+
+
+# IMP-028: multi-FMU composite codegen + runtime (packaged SCC groups).
+# The repo's tiny fixture FMUs carry no shared library, so this test
+# generates real ME FMUs with OMC, packages a two-node chain through the
+# CLI, and drives the resulting CS FMU with fmpy as the external master.
+
+_HERE = os.path.abspath(os.path.dirname(__file__))
+_GENERATE_SCRIPT = os.path.join(_HERE, "fixtures", "generate_test_fmus.py")
+_OMC_AVAILABLE = shutil.which("omc") is not None
+_FMPY_AVAILABLE = False
+try:
+    import fmpy  # noqa: F401
+    _FMPY_AVAILABLE = True
+except ImportError:
+    pass
+
+
+def _generate_chain_spec(work_dir: str) -> str:
+    """Write a chained integrator -> gain spec and return its path."""
+    integrator = os.path.join(work_dir, "integrator.fmu")
+    gain = os.path.join(work_dir, "gain.fmu")
+    spec = os.path.join(work_dir, "chain.toml")
+    with open(spec, "w") as f:
+        f.write(f'''
+[metadata]
+identifier = "chain_test"
+description = "integrator -> gain chain composite"
+
+[fmus]
+m00 = {{ path = "{integrator}", fmi_version = "2.0", kind = "ModelExchange" }}
+m01 = {{ path = "{gain}", fmi_version = "2.0", kind = "ModelExchange" }}
+
+[[connections]]
+source = "m00.y"
+target = "m01.u"
+
+[[variables]]
+name = "u[1]"
+type = "Real"
+causality = "input"
+target = "m00.u"
+
+[[variables]]
+name = "y[1]"
+type = "Real"
+causality = "output"
+source = "m01.y"
+
+[[variables]]
+name = "m00.y[1]"
+type = "Real"
+causality = "output"
+source = "m00.y"
+
+[[variables]]
+name = "m01.y[1]"
+type = "Real"
+causality = "output"
+source = "m01.y"
+
+[solver]
+type = "fixed_step"
+step_size = 0.001
+communication_step = 0.01
+
+[wrapper]
+communication_step = 0.01
+''')
+    return spec
+
+
+def _trajectory(result):
+    """Normalise fmpy.simulate_fmu output (DataFrame or recarray) to
+    ``(names, series_dict)``."""
+    import numpy as np
+    if hasattr(result, "columns"):  # pandas.DataFrame
+        names = list(result.columns)
+        return names, {n: np.asarray(result[n]).astype(np.float64) for n in names}
+    names = list(result.dtype.names)
+    return names, {n: np.asarray(result[n]) for n in names}
+
+
+@pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
+@pytest.mark.skipif(not _OMC_AVAILABLE, reason="OpenModelica compiler (omc) not installed")
+@pytest.mark.skipif(not _FMPY_AVAILABLE, reason="fmpy not installed (pip install fmpy)")
+class TestMultiFmuEndToEnd:
+    """IMP-028: a two-ME-node chained spec must build, package, and run."""
+
+    def test_two_node_chain_builds_and_simulates(self, tmp_path):
+        work = str(tmp_path)
+
+        # 1. Generate real ME FMUs with OMC.
+        subprocess.run(
+            [sys.executable, _GENERATE_SCRIPT, work],
+            check=True, capture_output=True, text=True, timeout=300,
+        )
+        for fname in ("integrator.fmu", "gain.fmu"):
+            assert os.path.isfile(os.path.join(work, fname)), f"missing {fname}"
+
+        # 2. Write the chained spec.
+        spec = _generate_chain_spec(work)
+        out_fmu = os.path.join(work, "chain.fmu")
+
+        # 3. Build + package via the CLI.
+        vcpkg_root = os.environ.get("VCPKG_ROOT")
+        cmd = [
+            sys.executable, "-m", "cs_fmu_packager", spec,
+            "-o", out_fmu, "--vcpkg-root", vcpkg_root,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        assert result.returncode == 0, (
+            f"packaging failed\nstdout:{result.stdout}\nstderr:{result.stderr}"
+        )
+        assert os.path.isfile(out_fmu)
+
+        # Packaged FMU must embed the pre-extracted internal binaries.
+        with zipfile.ZipFile(out_fmu) as zf:
+            names = zf.namelist()
+            assert "resources/m00/binaries/linux64/integrator.so" in names
+            assert "resources/m01/binaries/linux64/gain.so" in names
+
+        # 4. Drive the composite with fmpy (external master, steps the CS FMU).
+        import fmpy
+        import numpy as np
+
+        stop_time = 0.2
+        dt = np.dtype([("time", np.float64), ("u[1]", np.float64)])
+        step = np.array([(0.0, 1.0), (1.0, 1.0)], dtype=dt)
+        result = fmpy.simulate_fmu(
+            out_fmu, start_time=0.0, stop_time=stop_time,
+            step_size=0.01, input=step,
+        )
+        names, series = _trajectory(result)
+        assert "y[1]" in names
+        assert "m00.y[1]" in names
+        assert "m01.y[1]" in names
+
+        time = series["time"]
+        y1 = series["y[1]"]
+        y00 = series["m00.y[1]"]
+        y01 = series["m01.y[1]"]
+
+        # 5. Behavioural checks (integrator: y=x=t for u=1; gain: y=2*u):
+        i_end = int(np.argmin(np.abs(time - stop_time)))
+        # Integrator output tracks time.
+        assert 0.0 < y00[i_end] < stop_time + 0.01, f"m00.y[1]={y00[i_end]}"
+        assert abs(y00[i_end] - stop_time) < 5e-3
+        # Gain doubles the chained integrator output (proves the connection).
+        assert abs(y01[i_end] - 2.0 * y00[i_end]) < 5e-3, (
+            f"m01.y[1]={y01[i_end]} not 2*m00.y[1]={y00[i_end]}"
+        )
+        # Boundary output mirrors the last node probe output.
+        assert abs(y1[i_end] - y01[i_end]) < 1e-9
+        # Outputs are recorded and finite over the whole run.
+        assert np.all(np.isfinite(y1))
+
+    def test_two_node_chain_respects_zero_input(self, tmp_path):
+        """With u=0 the integrator state stays at zero (input propagation)."""
+        work = str(tmp_path)
+        subprocess.run(
+            [sys.executable, _GENERATE_SCRIPT, work],
+            check=True, capture_output=True, text=True, timeout=300,
+        )
+        spec = _generate_chain_spec(work)
+        out_fmu = os.path.join(work, "chain.fmu")
+        cmd = [
+            sys.executable, "-m", "cs_fmu_packager", spec,
+            "-o", out_fmu, "--vcpkg-root", os.environ.get("VCPKG_ROOT"),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        assert result.returncode == 0, result.stderr
+
+        import fmpy
+        import numpy as np
+        dt = np.dtype([("time", np.float64), ("u[1]", np.float64)])
+        step = np.array([(0.0, 0.0), (1.0, 0.0)], dtype=dt)
+        result = fmpy.simulate_fmu(
+            out_fmu, start_time=0.0, stop_time=0.1,
+            step_size=0.01, input=step,
+        )
+        names, series = _trajectory(result)
+        y00 = series["m00.y[1]"]
+        y01 = series["m01.y[1]"]
+        assert np.max(np.abs(y00)) < 1e-9, f"integrator drifted: {y00}"
+        assert np.max(np.abs(y01)) < 1e-9, f"gain output drifted: {y01}"

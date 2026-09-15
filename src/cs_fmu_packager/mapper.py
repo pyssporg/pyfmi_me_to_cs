@@ -274,6 +274,14 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
         if fid not in all_ordered:
             execution_order.append(fid)
 
+    # Assign deterministic wrapper boundary value references (1..N) in the
+    # same order used by model_description.py (inputs, outputs, parameters).
+    # The wrapper C code matches these when the master calls fmi2Set*/fmi2Get*.
+    for idx, mapped in enumerate(
+        wrapper_inputs + wrapper_outputs + wrapper_parameters, 1
+    ):
+        mapped.wrapper_value_reference = idx
+
     # Collect warnings from unsupported FMU features
     for fmu_id, doc in fmu_docs.items():
         for feature in _detect_unsupported_features(doc):
