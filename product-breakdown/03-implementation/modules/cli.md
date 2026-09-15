@@ -11,17 +11,17 @@ CLI entry point and pipeline orchestration. Provides a `click`-based command-lin
 | Function | Description |
 | --- | --- |
 | `main()` | Click command entry point; delegates to `_execute()` |
-| `_execute()` | Internal pipeline execution: parse spec → build mapping → dry-run check → codegen → build → package → write report |
+| `_execute()` | Internal pipeline execution: parse SSP package → build mapping → dry-run check → codegen → build → package → write report |
 
 ## CLI Options
 
 | Option | Description |
 | --- | --- |
-| `SPEC` (positional) | Path to TOML package specification file |
+| `SPEC` (positional) | Path to a complete SSP package (`.ssp`) |
 | `-o, --output` | Output FMU path (default: `<spec_name>.fmu`) |
 | `-r, --report` | Build report JSON output path |
 | `--vcpkg-root` | Path to vcpkg installation |
-| `--dry-run` | Validate spec + inspect FMUs only (no build) |
+| `--dry-run` | Validate package + inspect FMUs only (no build) |
 | `-v, --verbose` | Enable diagnostic logging |
 
 ## Error Handling

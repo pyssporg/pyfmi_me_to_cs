@@ -4,8 +4,8 @@
 
 | Entity | Description | Owner | Created In |
 | --- | --- | --- | --- |
-| `PackageSpec` | Parsed and validated package specification from TOML input | `spec.py` | Phase 1 |
-| `FmuMetadata` | Metadata extracted from an FMU's modelDescription.xml | `fmu_reader.py` | Phase 2 |
+| `PackageSpec` | Parsed and validated package specification from a complete SSP (`.ssp`) archive | `ssp_spec.py` | Phase 1 |
+| `Fmi2ModelDescriptionDocument` | Metadata extracted from an FMU's modelDescription.xml | `fmu_reader.py` | Phase 2 |
 | `MappingTable` | Resolved mapping: variables, connections, algebraic loops, execution order | `mapper.py` | Phase 3 |
 | Generated C source files | `fmi2_interface.c`, `solver_integration.c`, `fixed_point_iteration.c` | `codegen/*.py` | Phase 4 |
 | `CMakeLists.txt` | CMake build configuration | `codegen/cmake.py` | Phase 4 |
@@ -24,7 +24,7 @@
 ## Data Flow
 
 ```
-TOML File ──→ parse_spec() ──→ PackageSpec ──→ inspect_fmu() ──→ FmuMetadata
+SSP (.ssp) archive ──→ parse_spec() ──→ PackageSpec ──→ inspect_fmu() ──→ Fmi2ModelDescriptionDocument
                                                                     │
                                           PackageSpec + FmuMetadata │
                                                                     ▼

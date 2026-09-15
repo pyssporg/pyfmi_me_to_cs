@@ -7,7 +7,7 @@ The cs-fmu-packager operates as a sequential six-phase pipeline:
 ```
 Phase 1:     Phase 2:     Phase 3:     Phase 4:     Phase 5:     Phase 6:
 Spec Parse → FMU Inspect →  Mapping   → Codegen   →  Build     →  Package
-(spec.py)   (fmu_reader.py) (mapper.py) (codegen/)  (builder.py) (packager.py)
+(ssp_spec.py) (fmu_reader.py) (mapper.py) (codegen/)  (builder.py) (packager.py)
 ```
 
 ## Module Responsibility Map
@@ -15,7 +15,7 @@ Spec Parse → FMU Inspect →  Mapping   → Codegen   →  Build     →  Pack
 | Module | Phase | Responsibility |
 | --- | --- | --- |
 | `cli.py` | All (orchestrator) | CLI entry point, argument parsing, pipeline orchestration, error handling |
-| `spec.py` | 1 | TOML parsing, field validation, error collection (all errors before raising) |
+| `ssp_spec.py` | 1 | SSP package (.ssp) parsing, embedded-FMU extraction, field validation, error collection (all errors before raising) |
 | `fmu_reader.py` | 2 | ZIP archive opening, modelDescription.xml parsing, variable extraction, feature detection |
 | `models.py` | 1–3, 6 | Dataclass definitions: PackageSpec, MappingTable, BuildReport (FmuMetadata/ScalarVariable removed, delegated to pyssp_standard) |
 | `mapper.py` | 2–3 | Variable reference resolution, connection direction validation, SCC detection + execution order (pyssp_standard connection_graph delegate) |

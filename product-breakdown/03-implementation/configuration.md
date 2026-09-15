@@ -1,15 +1,14 @@
 # Configuration
 
-## TOML Package Specification
+## SSP Package Specification
 
-The primary configuration input is a TOML file with the following sections:
+The primary configuration input is a complete SSP package (`.ssp`) — a ZIP archive containing `SystemStructure.ssd` and the embedded internal FMUs (see `modules/ssp_spec.md`):
 
-- `[metadata]` — identifier, description, author, version (optional)
-- `[fmus]` — internal FMU references (name → path, fmi_version, kind)
-- `[[connections]]` — source/target variable pairs
-- `[[variables]]` — wrapper boundary variables (name, type, causality, source/target, start); optional — auto-discovered from FMU files when absent
-- `[solver]` — solver type, step_size, communication_step, algebraic_loop config
-- `[wrapper]` — wrapper communication_step
+- `SystemStructure` attributes — name/version → `metadata.identifier`
+- `<Components>` — internal FMU references (name → source URI inside the archive)
+- `<Connections>` — source/target variable pairs (`startElement`/`startConnector` → `endElement`/`endConnector`)
+- `<Connectors>` — boundary variables (edge wiring); optional — auto-discovered from FMU files when absent (IMP-013)
+- vendor `<Annotations>` (`cs-fmu-packager`) — solver type, step sizes, algebraic_loop config, wrapper communication_step
 
 ## pyproject.toml
 
@@ -17,7 +16,7 @@ Python package configuration:
 - Package name: `cs-fmu-packager`
 - Version: `0.1.0`
 - Python: `>=3.10`
-- Dependencies: `click>=8.0`, `toml>=0.10`, `Jinja2>=3.0`, `pyssp-standard>=0.8`
+- Dependencies: `click>=8.0`, `pyssp-standard>=0.8` (SSP 1.0 SSD + FMI metadata); `toml` removed with the TOML front-end (IMP-029)
 - Entry point: `cs-fmu-packager = "cs_fmu_packager.cli:main"`
 
 ## CMakePresets.json

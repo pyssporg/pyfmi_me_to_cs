@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
-import textwrap
-from typing import Callable, Generator
+import zipfile
+from typing import Generator
 
 import pytest
 
-from tests.helpers import make_test_fmu
+from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+
+from tests.helpers import build_ssp_document, make_fmu_bytes, make_test_fmu
 
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -58,18 +61,67 @@ def tmp_fmu_path() -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def spec_file() -> Callable[[str], str]:
-    """Return a function that writes TOML content to a temp file and returns its path."""
+def make_ssp():
+    """Return a factory that writes a complete ``.ssp`` archive for testing.
+
+    Usage::
+
+        path = make_ssp(
+            fmu_sources={"m00": "resources/m00.fmu", ...},
+            fmu_files={"m00": b"<modelDescription...>"},
+            connectors=[...],
+            connections=[...],
+        )
+    """
     _paths: list[str] = []
 
-    def _write(content: str) -> str:
-        fd, path = tempfile.mkstemp(suffix=".toml")
-        with os.fdopen(fd, "w") as f:
-            f.write(textwrap.dedent(content))
+    def _make(
+        fmu_sources: dict[str, str],
+        *,
+        fmu_files: dict[str, bytes] | None = None,
+        connectors: list[dict] | None = None,
+        connections: list[tuple[str, str, str, str]] | None = None,
+        parameters: list[tuple[str, str, object]] | None = None,
+        annotations: list[tuple[str, object]] | None = None,
+        name: str = "system",
+        suffix: str = ".ssp",
+    ) -> str:
+        document = build_ssp_document(
+            fmu_sources=fmu_sources,
+            connectors=connectors,
+            connections=connections,
+            parameters=parameters,
+            annotations=annotations,
+            name=name,
+        )
+        fd, path = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+        try:
+            sentinel = object()
+
+            def _fmu_bytes(cname: str):
+                if fmu_files is not None and cname in fmu_files:
+                    return fmu_files[cname]
+                return sentinel
+
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(document))
+                for cname, source in fmu_sources.items():
+                    member = re.sub(r"^\./", "", source)
+                    data = _fmu_bytes(cname)
+                    if data is sentinel:
+                        data = make_fmu_bytes()
+                    zf.writestr(member, data)
+        except Exception:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            raise
         _paths.append(path)
         return path
 
-    yield _write
+    yield _make
 
     for p in _paths:
         if os.path.exists(p):

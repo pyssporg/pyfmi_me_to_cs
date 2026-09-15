@@ -8,13 +8,13 @@ The generated Co-Simulation FMU has no runtime dependencies beyond the standard 
 
 | Error | Cause | Resolution |
 | --- | --- | --- |
-| Spec file not found | Invalid or missing path to `.toml` file | Verify the spec path is correct and the file exists |
-| Missing required section | TOML spec missing `[fmus]`, `[[connections]]`, `[solver]`, or `[wrapper]` (or `[[variables]]` if explicitly declared) | Add the missing section to the spec |
+| SSP package not found | Invalid or missing path to `.ssp` archive | Verify the package path is correct and the file exists |
+| Missing member or section | `.ssp` missing `SystemStructure.ssd` or a referenced `<Component source>` member | Check the archive layout against the SSD `source` URIs |
 | FMI version not 2.0 | Input FMU uses FMI 1.0 or 3.0 | Use FMI 2.0 Model Exchange FMUs |
 | Not a ModelExchange FMU | Input FMU is Co-Simulation only | Use a Model Exchange FMU for input |
-| Variable not found in FMU | Spec references a variable name that doesn't exist in the FMU's modelDescription.xml | Check variable names in the spec against the FMU's modelDescription.xml |
-| Duplicate variable name | Two wrapper variables with the same `name` field | Rename one of the duplicate variables |
-| Step size > communication step | `solver.step_size` > `solver.communication_step` | Set step_size ≤ communication_step |
+| Variable not found in FMU | Package references a variable that doesn't exist in the FMU's modelDescription.xml | Check connector/connection names against the FMU metadata |
+| Duplicate boundary name | Two system connectors with the same `name` | Rename one of the connectors |
+| Step size > communication step | vendor annotation `stepSize` > `communicationStep` (or CLI override) | Set step size ≤ communication step |
 | vcpkg root not found | CMake build cannot locate vcpkg | Set `VCPKG_ROOT` environment variable or pass `--vcpkg-root` |
 | Build failed | CMake configure or build error | Check CMake output for diagnostic; verify CMake, GCC, and SUNDIALS are installed |
 | Solver initialization failed | Internal solver (SUNDIALS ARKODE) could not be initialized | Check that internal FMUs provide valid continuous states |

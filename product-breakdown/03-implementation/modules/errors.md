@@ -11,7 +11,7 @@ Custom exception hierarchy for the cs-fmu-packager tool. All exceptions inherit 
 | Exception | Raised By | Description |
 | --- | --- | --- |
 | `CsFmuPackagerError` | — | Base exception for all cs-fmu-packager errors |
-| `SpecValidationError` | `spec.py` | Package specification is invalid |
+| `SpecValidationError` | `ssp_spec.py` | Package specification is invalid |
 | `FmuInspectionError` | `fmu_reader.py` | Internal FMU cannot be read or validated |
 | `MappingError` | `mapper.py` | Variable mapping between spec and FMUs fails |
 | `CodegenError` | `codegen/wrapper.py` | C code generation fails |

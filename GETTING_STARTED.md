@@ -38,58 +38,62 @@ python -m cs_fmu_packager --help
 
 ## Quickstart Walkthrough
 
-### Step 1: Create a spec file
+### Step 1: Create an SSP package
 
-Create a file called `my_system.toml`:
+The input to cs-fmu-packager is a **complete SSP package** (`.ssp`) — a ZIP
+archive embedding the internal Model Exchange FMUs alongside a
+`SystemStructure.ssd` system structure description. Create a directory:
 
-```toml
-[metadata]
-identifier = "my_cs_fmu"
-
-[fmus]
-compressor = { path = "path/to/compressor.fmu" }
-valve       = { path = "path/to/valve.fmu" }
-
-[[connections]]
-source = "compressor.outlet_pressure"
-target = "valve.inlet_pressure"
-
-[[variables]]
-name       = "target_speed"
-type       = "Real"
-causality  = "input"
-source     = "compressor.speed"
-
-[[variables]]
-name       = "flow_rate"
-type       = "Real"
-causality  = "output"
-target     = "valve.flow_rate"
-
-[solver]
-type              = "fixed_step"
-step_size         = 1e-3
-communication_step = 1e-3
-
-[wrapper]
-communication_step = 1e-3
+```text
+my_system/
+├── SystemStructure.ssd
+└── resources/
+    ├── compressor.fmu
+    └── valve.fmu
 ```
 
-> **Note:** The `[[variables]]` section is optional. If omitted, all FMU inputs,
-> outputs, and parameters are automatically exposed as wrapper boundary variables
-> (see [IMP-013](product-breakdown/06-evolution/candidates/IMP-013.md)).
+With `SystemStructure.ssd`:
 
-Replace `"path/to/compressor.fmu"` and `"path/to/valve.fmu"` with the actual paths to your FMI 2.0 Model Exchange FMU files.
+```xml
+<ssd:SystemStructureDescription
+    xmlns:ssd="http://ssp-standard.org/SSP1/SystemStructureDescription">
+  <ssd:System name="System">
+    <ssd:Connectors>
+      <ssd:Connector element="compressor/speed" name="target_speed" kind="input" />
+      <ssd:Connector element="valve/flow_rate"  name="flow_rate"   kind="output" />
+    </ssd:Connectors>
+    <ssd:Elements>
+      <ssd:Component name="compressor" source="resources/compressor.fmu" />
+      <ssd:Component name="valve"      source="resources/valve.fmu" />
+    </ssd:Elements>
+    <ssd:Connections>
+      <ssd:Connection startElement="compressor" startConnector="outlet_pressure"
+                      endElement="valve" endConnector="inlet_pressure" />
+    </ssd:Connections>
+  </ssd:System>
+</ssd:SystemStructureDescription>
+```
 
-For a fully commented example, see `spec.example.toml` (if available in the repository root; see [IMP-002](product-breakdown/06-evolution/candidates/IMP-002.md)).
-
-### Step 2: Validate your spec (dry run)
+Then package it:
 
 ```bash
-python -m cs_fmu_packager my_system.toml --dry-run
+cd my_system && zip -r ../my_system.ssp SystemStructure.ssd resources/
 ```
 
-This validates the spec and inspects your FMU files without building anything. You should see output like:
+> **Note:** every internal FMU input, output, and parameter is exposed at the
+> packaged boundary — through the declared `<Connectors>` or automatically by
+> default — so all internal values can be get/set/viewed by an external master.
+> Fixed-step and communication step sizes come from the optional
+> `cs-fmu-packager` vendor `<Annotations>` block, or fall back to defaults.
+
+### Step 2: Validate your package (dry run)
+
+```bash
+python -m cs_fmu_packager my_system.ssp --dry-run
+```
+
+This validates the SSP package and inspects the embedded FMU files without
+building anything. You should see output like:
 
 ```
 Dry run: spec validated and FMUs inspected successfully.
@@ -97,18 +101,19 @@ Dry run: spec validated and FMUs inspected successfully.
   Algebraic loops: 0
 ```
 
-If you see errors, check the spec for typos and verify the FMU paths.
+If you see errors, check the SSD for typos and verify the FMU `source` URIs
+match members inside the archive.
 
 ### Step 3: Build the Co-Simulation FMU
 
 ```bash
-python -m cs_fmu_packager my_system.toml
+python -m cs_fmu_packager my_system.ssp
 ```
 
 The tool will:
-1. Parse and validate your spec
-2. Inspect each FMU's modelDescription.xml
-3. Map wrapper variables to internal FMU variables
+1. Parse `SystemStructure.ssd` and validate the package
+2. Extract and inspect each internal FMU's modelDescription.xml
+3. Map boundary variables to internal FMU variables
 4. Generate C wrapper source code
 5. Compile the wrapper using CMake and your C compiler
 6. Package everything into a single FMU file
@@ -126,7 +131,7 @@ Your packaged Co-Simulation FMU is at `my_system.fmu`. It is a standard FMI 2.0 
 
 To also generate a JSON build report:
 ```bash
-python -m cs_fmu_packager my_system.toml --report build-report.json
+python -m cs_fmu_packager my_system.ssp --report build-report.json
 ```
 
 ## Troubleshooting
@@ -145,15 +150,15 @@ sudo apt install build-essential
 ```
 
 ### Spec validation errors
-- Check that required sections are present: `[fmus]`, `[[connections]]`, `[solver]`, `[wrapper]`. The `[[variables]]` section is optional.
-- Use `"fixed_step"` (not `"fixed-step"`) for `solver.type`.
-- Ensure `solver.communication_step` equals `wrapper.communication_step`.
-- FMU paths should be absolute or relative to the working directory.
+- Check that `SystemStructure.ssd` contains `<Components>` with `source` URIs that exist inside the `.ssp` archive.
+- Connector `kind` must be one of: `input`, `output`, `parameter`, `calculatedParameter`, `inout`.
+- Boundary connector `element` paths use the form `<component>/<variable>`.
+- Solver policy (step sizes, algebraic-loop iteration) comes from the `cs-fmu-packager` vendor annotation; if present, `stepSize` must be ≤ `communicationStep`.
 
 ### The build fails
 Run with `--verbose` to see detailed pipeline output:
 ```bash
-python -m cs_fmu_packager my_system.toml --verbose
+python -m cs_fmu_packager my_system.ssp --verbose
 ```
 This prints each pipeline phase and any warnings from the mapping step.
 

@@ -35,53 +35,69 @@ pip install -e .
 
 ## Quickstart
 
-Create a TOML specification file (e.g., `my_system.toml`):
+The packager consumes a **complete SSP package** (`.ssp`): a ZIP archive that embeds
+its internal Model Exchange FMUs alongside a `SystemStructure.ssd` system structure
+description document.
 
-```toml
-[metadata]
-identifier = "my_cs_fmu"
-
-[fmus]
-compressor = { path = "path/to/compressor.fmu" }
-valve       = { path = "path/to/valve.fmu" }
-
-[[connections]]
-source = "compressor.outlet_pressure"
-target = "valve.inlet_pressure"
-
-[[variables]]
-name       = "target_speed"
-type       = "Real"
-causality  = "input"
-source     = "compressor.speed"
-
-[[variables]]
-name       = "flow_rate"
-type       = "Real"
-causality  = "output"
-target     = "valve.flow_rate"
-
-[solver]
-type              = "fixed_step"
-step_size         = 1e-3
-communication_step = 1e-3
-
-[wrapper]
-communication_step = 1e-3
+```text
+my_system.ssp
+├── SystemStructure.ssd          # SSP 1.0 system structure description
+└── resources/
+    ├── compressor.fmu           # internal Model Exchange FMU
+    └── valve.fmu                # internal Model Exchange FMU
 ```
 
-> **Note:** The `[[variables]]` section is optional. If omitted, all FMU inputs,
-> outputs, and parameters are automatically exposed as wrapper boundary variables
-> (see [IMP-013](product-breakdown/06-evolution/candidates/IMP-013.md)).
+Create the `SystemStructure.ssd` (SSP 1.0):
+
+```xml
+<ssd:SystemStructureDescription
+    xmlns:ssd="http://ssp-standard.org/SSP1/SystemStructureDescription"
+    xmlns:ssc="http://ssp-standard.org/SSP1/SystemStructureCommon">
+  <ssd:System name="System">
+    <ssd:Connectors>
+      <ssd:Connector element="compressor/speed" name="target_speed" kind="input" />
+      <ssd:Connector element="valve/flow_rate"  name="flow_rate"   kind="output" />
+    </ssd:Connectors>
+    <ssd:Elements>
+      <ssd:Component name="compressor" source="resources/compressor.fmu" />
+      <ssd:Component name="valve"      source="resources/valve.fmu" />
+    </ssd:Elements>
+    <ssd:Connections>
+      <ssd:Connection startElement="compressor" startConnector="outlet_pressure"
+                      endElement="valve" endConnector="inlet_pressure" />
+    </ssd:Connections>
+  </ssd:System>
+  <ssd:Annotations>
+    <ssc:Annotation type="cs-fmu-packager">
+      <Solver type="fixed_step" stepSize="1e-3" communicationStep="1e-3" />
+      <Wrapper communicationStep="1e-3" />
+    </ssc:Annotation>
+  </ssd:Annotations>
+</ssd:SystemStructureDescription>
+```
+
+Package it (plus the FMUs) into the archive:
+
+```bash
+zip -r my_system.ssp SystemStructure.ssd resources/
+```
+
+> **Note:** solver and wrapper configuration (step sizes, algebraic-loop
+> iteration policy) is carried by the optional `cs-fmu-packager` vendor
+> annotation and falls back to built-in defaults when absent. Every internal
+> FMU input, output, and parameter is accessible at the packaged boundary —
+> either through the system `<Connectors>` you declare, or automatically by
+> default. This enables get/set and observation of all internal values from an
+> external master (see [IMP-029](product-breakdown/06-evolution/done/IMP-029-ssp-ssd-input-format.md)).
 
 Build the Co-Simulation FMU:
 
 ```bash
-python -m cs_fmu_packager my_system.toml
+python -m cs_fmu_packager my_system.ssp
 ```
 
 This produces `my_system.fmu`. Add `--verbose` to see the full pipeline output,
-or `--dry-run` to validate the spec and inspect FMUs without building.
+or `--dry-run` to validate the package and inspect FMUs without building.
 
 ## CLI Usage
 
@@ -91,11 +107,13 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 
 | Option | Description |
 |--------|-------------|
-| `SPEC` | Path to a TOML package specification file (required argument) |
+| `SPEC` | Path to a complete SSP package (`.ssp`) archive — `SystemStructure.ssd` plus embedded FMUs (required argument) |
 | `-o, --output FILE` | Output FMU path (default: `<spec_basename>.fmu`) |
 | `-r, --report FILE` | Write a JSON build report to the given path |
 | `--vcpkg-root DIR` | Path to a vcpkg installation (overrides `VCPKG_ROOT`) |
-| `--dry-run` | Validate spec and inspect FMUs without building |
+| `--step-size FLOAT` | Override the fixed-step size parsed from the vendor annotation |
+| `--communication-step FLOAT` | Override the communication step parsed from the vendor annotation |
+| `--dry-run` | Validate package and inspect FMUs without building |
 | `-v, --verbose` | Enable diagnostic pipeline logging |
 | `--help` | Show usage and exit |
 

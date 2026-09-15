@@ -12,7 +12,7 @@ Three-tier testing strategy:
 
 | File | Type | Tests | Coverage |
 | --- | --- | --- | --- |
-| `test_spec_validation.py` | Unit | 13 | Spec parsing, validation rules, error messages |
+| `test_ssp_spec.py` | Unit | 23 | SSP package parsing, normalization, validation rules, vendor config |
 | `test_fmu_inspection.py` | Unit | 6 | FMU ZIP parsing, XML extraction, validation |
 | `test_mapper.py` | Unit | 7 | Variable resolution, connection direction, SCC detection |
 | `test_codegen.py` | Unit | 3 classes | CMake generation, model description, variable preservation |
@@ -22,7 +22,7 @@ Three-tier testing strategy:
 
 - Tests avoid proprietary FMI tools — test FMUs are generated as in-memory ZIP files with minimal valid XML.
 - Build tests are conditional (`@pytest.mark.skipif`) on `VCPKG_ROOT` being set to avoid CI failures on non-Linux or non-vcpkg environments.
-- Spec validation tests use temporary TOML files written to disk, then parsed through the standard API.
+- SSP package tests build complete `.ssp` archives (SSD + embedded FMUs) into temporary files, then parse them through the standard API (INP-029).
 - Mapper tests create temporary FMU files via `tempfile.mkstemp` and clean up via `shutil.rmtree`.
 
 ## Modelica-based Fixture Generation and Behavioral Verification

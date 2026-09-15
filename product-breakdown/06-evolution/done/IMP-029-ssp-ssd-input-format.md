@@ -6,15 +6,15 @@ An improvement candidate is not implementation approval. It needs a scoped task 
 
 ## Lifecycle Stage
 
-Candidate
+Done
 
 ## Status
 
-Proposed
+Completed (2026-09-15)
 
 ## Layer
 
-Evolution (primary). Downstream layers: 01-product (UC-006 declarative spec), 02-architecture (AD-005 supersession), 03-implementation (spec.py removal, cli.py), 04-verification (test_spec_validation.py replacement).
+Evolution (primary). Downstream layers: 01-product (UC-006 declarative spec), 02-architecture (AD-005 supersession), 03-implementation (ssp_spec.py, cli.py), 04-verification (test_ssp_spec.py).
 
 ## Theme
 
@@ -197,8 +197,21 @@ The intent bullet "create comprehensive usage… documentation under docs/" and 
 
 ### Decision-Log Entry Suggestion
 
-If selected, add decision-log entries:
+Recorded as:
 ```
-| AD-IMP-029-SSP | Adopt complete `.ssp` as sole package specification input (SSP 1.0 SSD + embedded FMUs) | Architecture | Proposed | `06-evolution/candidates/IMP-029-ssp-ssd-input-format.md` | `src/cs_fmu_packager/ssp_spec.py`, `src/cs_fmu_packager/cli.py`, `pyproject.toml`, `spec.md`, `test_ssp_spec.py` |
-| AD-005 (REVOKED) | TOML Spec Format | Architecture | Superseded by AD-IMP-029-SSP | `02-architecture/decisions/AD-005-toml-spec-format.md` | `06-evolution/candidates/IMP-029-ssp-ssd-input-format.md` |
+| AD-IMP-029-SSP | Adopt complete `.ssp` as sole package specification input (SSP 1.0 SSD + embedded FMUs) | Architecture | Accepted | `06-evolution/done/IMP-029-ssp-ssd-input-format.md` | `src/cs_fmu_packager/ssp_spec.py`, `src/cs_fmu_packager/spec.py` (deleted), `src/cs_fmu_packager/cli.py`, `pyproject.toml`, `tests/test_ssp_spec.py` |
+| AD-005 (REVOKED) | TOML Spec Format | Architecture | Superseded by AD-IMP-029-SSP | `02-architecture/decisions/AD-005-toml-spec-format.md` | `06-evolution/done/IMP-029-ssp-ssd-input-format.md` |
 ```
+
+## Completion Notes
+
+Implemented 2026-09-15:
+
+- **New front-end** `src/cs_fmu_packager/ssp_spec.py` — `parse_spec(path, workspace_dir=None)` reads a complete `.ssp` archive (namespace-tolerant `SystemStructure.ssd` parsing via `pyssp_standard`'s `Ssp1SsdCodec`), extracts embedded FMUs into a caller-owned workspace (`weakref` cleanup when unmanaged), and normalizes to `PackageSpec`. Level-1 validation re-implements the removed TOML rules (unknown components, duplicate boundary names, kind/type checks, `step_size ≤ communication_step`, solver/wrapper `communication_step` equality).
+- **Edge wiring** — system `<Connectors>` become boundary `WrapperVariable`s (kind → causality mapping, `calculatedParameter` → readable output, `inout` → `input`); `ParameterValues` feed start values; absent connectors fall back to mapper auto-discovery (IMP-013).
+- **Vendor annotation** — solver/wrapper policy (`Solver`/`AlgebraicLoop`/`Wrapper` elements on the `cs-fmu-packager` annotation) is parsed with defaults fallback, plus `--step-size`/`--communication-step` CLI overrides.
+- **TOML removed** — `spec.py` and `test_spec_validation.py` deleted, `toml>=0.10` dropped from `pyproject.toml`; the `spec_file` fixture was removed.
+- **Tests** — `tests/test_ssp_spec.py` (23 tests) replaces the TOML suite; `tests/helpers.py`/`conftest.py` gained `build_ssp_document`/`make_ssp`/`make_fmu_bytes` builders; the IMP-028 multi-FMU chain tests now author `.ssp` packages and exercise the full CLI build+simulate path with real OMC FMUs.
+- **Docs** — `modules/spec.md` → `modules/ssp_spec.md`, `test-cases/test_spec_validation.md` → `test-cases/test_ssp_spec.md`, README/GETTING_STARTED rewritten for `.ssp` input, Trace Chain 4 and decision log updated, AD-005 marked superseded.
+
+Full suite result: 60 passed (including IMP-028 multi-FMU chain build + fmpy simulation with real OMC FMUs and vcpkg).

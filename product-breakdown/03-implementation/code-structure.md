@@ -21,7 +21,7 @@ pyfmi_me_to_cs/
 │       ├── __init__.py
 │       ├── __main__.py
 │       ├── cli.py                 # CLI entry point (click-based)
-│       ├── spec.py                # TOML spec parsing and validation
+│       ├── ssp_spec.py            # SSP package (.ssp) parsing and validation
 │       ├── models.py              # Data models (dataclasses)
 │       ├── fmu_reader.py          # FMU inspection and XML parsing
 │       ├── mapper.py              # Variable mapping and SCC detection
@@ -38,7 +38,7 @@ pyfmi_me_to_cs/
 │           └── fixed_point.py     # fixed_point_iteration.c generation
 ├── tests/                         # Test suite
 │   ├── __init__.py
-│   ├── test_spec_validation.py    # 13 tests
+│   ├── test_ssp_spec.py           # 23 tests (SSP/SDD input)
 │   ├── test_fmu_inspection.py     # 6 tests
 │   ├── test_mapper.py             # 7 tests
 │   ├── test_codegen.py            # 3 test classes
@@ -57,13 +57,13 @@ The Python package is organized as a flat module tree with a `codegen/` sub-pack
 
 - **Entry point**: `cli.py` (via `__main__.py` and `pyproject.toml` script)
 - **Data models**: `models.py` (used by all other modules)
-- **Pipeline modules**: `spec.py`, `fmu_reader.py`, `mapper.py`, `codegen/` (sub-package), `builder.py`, `packager.py`
+- **Pipeline modules**: `ssp_spec.py`, `fmu_reader.py`, `mapper.py`, `codegen/` (sub-package), `builder.py`, `packager.py`
 - **Support**: `errors.py`, `model_description.py`
 
 ## Test Layout
 
 Tests are organized by pipeline phase:
-- `test_spec_validation.py` — spec parsing and validation (Phase 1)
+- `test_ssp_spec.py` — SSP package parsing and validation (Phase 1)
 - `test_fmu_inspection.py` — FMU inspection (Phase 2)
 - `test_mapper.py` — mapping pipeline (Phase 3)
 - `test_codegen.py` — C code and model description generation (Phase 4)

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded (by AD-IMP-029-SSP, see `06-evolution/done/IMP-029-ssp-ssd-input-format.md`)
 
 ## Layer
 
@@ -39,16 +39,16 @@ Use **TOML** as the package specification format. Do not support YAML or any oth
 
 ## Affected Artifacts
 
-- `03-implementation/modules/spec.md` — TOML parser and validator
+- `03-implementation/modules/ssp_spec.md` — SSP package parser and normalizer (replaced `spec.py`)
 - `03-implementation/modules/models.md` — `PackageSpec` and related dataclasses
-- `04-verification/test-cases/test_spec_validation.md` — spec validation test fixtures
+- `04-verification/test-cases/test_ssp_spec.md` — SSP package validation test fixtures
 
 ## Verification
 
-- A valid TOML spec file parses without errors and produces a correct `PackageSpec`.
-- Invalid TOML or missing sections produce clear error messages.
-- The spec validates all field constraints before any FMU inspection begins.
+- A valid `.ssp` package parses without errors and produces a correct `PackageSpec`.
+- Invalid `.ssp` archives or missing `SystemStructure.ssd` produce clear error messages.
+- The package validates all field constraints before any FMU inspection begins.
 
 ## Review Trigger
 
-- If standard simulation interchange formats (SSP, FMI SSP) gain widespread adoption and users request direct import/export.
+- ~~If standard simulation interchange formats (SSP, FMI SSP) gain widespread adoption and users request direct import/export.~~ **Met:** SSP (SSP 1.0, complete `.ssp` packages) is now the sole input format; see AD-IMP-029-SSP. This decision is superseded.

@@ -8,7 +8,7 @@ This layer describes how the cs-fmu-packager product and system are expected to 
 | --- | --- |
 | `risks.md` | Known risks, tradeoffs, and open concerns |
 | `changelog.md` | Summary of notable changes over time |
-| `candidates/` | Proposed improvements not yet selected for development (IMP-001 through IMP-012) |
+| `candidates/` | Proposed improvements not yet selected for development (IMP-002 through IMP-028) |
 
 ## Questions Answered
 

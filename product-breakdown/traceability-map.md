@@ -50,11 +50,11 @@ INT-004 Enable reproducible, automatable packaging
     -> UC-006 Generate Co-Simulation FMUs from a Declarative Spec
       -> FR-002 Accept declarative package spec describing FMUs, connections, solver
         -> SPR-001 through SPR-007 (specification format requirements)
-          -> AD-005 TOML Spec Format
-            -> 02-architecture/data-view.md (PackageSpec → MappingTable)
-              -> 03-implementation/modules/spec.md (TOML parsing and validation)
+          -> AD-IMP-029-SSP SSP package (`.ssp`) as sole spec input (AD-005 superseded)
+            -> 02-architecture/data-view.md (SSP archive → PackageSpec → MappingTable)
+              -> 03-implementation/modules/ssp_spec.md (SSP parsing and normalization)
               -> 03-implementation/modules/models.md (PackageSpec dataclasses)
-                -> 04-verification/test-cases/test_spec_validation.md (13 tests)
+                -> 04-verification/test-cases/test_ssp_spec.md (23 tests)
 ```
 
 ## Trace Chain 5: Deterministic Artifacts

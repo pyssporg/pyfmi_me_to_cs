@@ -4,8 +4,8 @@
 
 1. **Install build dependencies**: Python ≥3.10, CMake ≥3.22, GCC/Clang, vcpkg with SUNDIALS
 2. **Install Python package**: `pip install .` (from repository root)
-3. **Prepare package specification**: Create a `.toml` file describing internal FMUs, connections, variables, and solver
-4. **Run packager**: `cs-fmu-packager spec.toml -o output.fmu`
+3. **Prepare SSP package**: Assemble a complete `.ssp` archive embedding internal FMUs plus `SystemStructure.ssd` (components, connections, boundary connectors, optional vendor solver annotation)
+4. **Run packager**: `cs-fmu-packager spec.ssp -o output.fmu`
 5. **Consume generated FMU**: The `.fmu` file can be loaded by any FMI 2.0 Co-Simulation master algorithm
 
 ## Platform Constraint

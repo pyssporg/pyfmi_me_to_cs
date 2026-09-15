@@ -6,9 +6,9 @@ Each phase in the 6-phase pipeline communicates through well-defined data struct
 
 | Phase | Input | Output | Module |
 | --- | --- | --- | --- |
-| 1. Spec Parse | TOML file path | `PackageSpec` | `spec.py` |
-| 2. FMU Inspect | `FmuRef.path` (from PackageSpec) | `FmuMetadata` | `fmu_reader.py` |
-| 3. Mapping | `PackageSpec` + `FmuMetadata` dict | `MappingTable` | `mapper.py` |
+| 1. Spec Parse | complete SSP package (`.ssp`) path | `PackageSpec` | `ssp_spec.py` |
+| 2. FMU Inspect | `FmuRef.path` (from PackageSpec, extracted workspace) | `Fmi2ModelDescriptionDocument` | `fmu_reader.py` |
+| 3. Mapping | `PackageSpec` + inspected FMI docs | `MappingTable` | `mapper.py` |
 | 4. Codegen | `PackageSpec` + `MappingTable` | Generated C source files, CMakeLists.txt, modelDescription.xml | `codegen/wrapper.py` |
 | 5. Build | Source directory with generated files | `BuildResult` (so_path, tool_versions) | `builder.py` |
 | 6. Package | `PackageSpec` + `MappingTable` + `BuildResult` | `.fmu` file + `BuildReport` | `packager.py` |

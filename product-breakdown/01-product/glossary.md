@@ -13,7 +13,7 @@
 | Internal FMU | An input Model Exchange FMU that is embedded inside the generated Co-Simulation FMU and instantiated by the wrapper at runtime. |
 | Mapping | The resolved association between wrapper boundary variables and internal FMU variables, including value references and type information. |
 | Model Exchange FMU | An FMU that implements the FMI 2.0 Model Exchange interface, exposing equations and state derivatives to the calling environment. |
-| Package Specification | A TOML file that declares the FMU inputs, connections, wrapper variables, and solver configuration for a packaging operation. |
+| Package Specification | A complete SSP package (`.ssp`) — `SystemStructure.ssd` plus embedded FMUs — that declares the FMU inputs, connections, boundary variables, and solver configuration for a packaging operation. |
 | SCC | Strongly Connected Component — a set of FMUs that form an algebraic loop through their interconnections, detected via Tarjan's algorithm. |
 | Solver Placement | The architectural choice of which FMUs are grouped behind a single solver boundary inside a Co-Simulation FMU. |
 | Value Reference | An integer identifier used in the FMI 2.0 protocol to refer to a specific ScalarVariable within an FMU. |

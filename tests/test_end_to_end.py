@@ -25,42 +25,27 @@ from cs_fmu_packager.models import BuildReport
 _VCPKG_AVAILABLE = "VCPKG_ROOT" in os.environ and os.path.isdir(os.environ["VCPKG_ROOT"])
 
 
-def _minimal_toml() -> str:
-    """Return a minimal but valid spec for testing."""
-    return """
-[metadata]
-identifier = "end_to_end_test"
-description = "End-to-end test FMU"
-author = "test"
-version = "0.1.0"
+def _make_simple_ssp(work_dir: str, *, connectors: list[dict], fmu_names=None):
+    """Write a small .ssp archive (two fake FMUs) and return its path (IMP-029)."""
+    from tests.helpers import build_ssp_document
+    from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
 
-[fmus]
-src = { path = "/tmp/fake_src.fmu", fmi_version = "2.0", kind = "ModelExchange" }
-
-[[connections]]
-source = "src.y"
-target = "src.u"
-
-[[variables]]
-name = "inp"
-type = "Real"
-causality = "input"
-target = "src.u"
-
-[[variables]]
-name = "out"
-type = "Real"
-causality = "output"
-source = "src.y"
-
-[solver]
-type = "fixed_step"
-step_size = 0.001
-communication_step = 0.01
-
-[wrapper]
-communication_step = 0.01
-"""
+    fmu_names = fmu_names or ["src.fmu", "tgt.fmu"]
+    fmu_sources = {
+        "src": f"resources/{fmu_names[0]}",
+        "tgt": f"resources/{fmu_names[1]}",
+    }
+    document = build_ssp_document(
+        name="auto_discovery_test",
+        fmu_sources=fmu_sources,
+        connectors=connectors,
+    )
+    ssp_path = os.path.join(work_dir, "spec.ssp")
+    with zipfile.ZipFile(ssp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(document))
+        for member in fmu_sources.values():
+            zf.writestr(member, b"fake-fmu")
+    return ssp_path
 
 
 class TestAssemblyWithoutBuild:
@@ -189,38 +174,16 @@ class TestAssemblyWithoutBuild:
                 n2 = sorted(z2.namelist())
                 assert n1 == n2
 
-    def test_auto_discovery_without_variables_section(self):
-        """End-to-end: spec without [[variables]] should auto-discover variables."""
-        # Create a spec without [[variables]]
-        spec_str = """
-[metadata]
-identifier = "auto_discovery_test"
+    def test_auto_discovery_without_variables_section(self, tmp_path):
+        """End-to-end: an .ssp without connectors auto-discovers variables."""
+        from cs_fmu_packager.ssp_spec import parse_spec
 
-[fmus]
-src = { path = "src.fmu" }
-tgt = { path = "tgt.fmu" }
-
-[[connections]]
-source = "src.out"
-target = "tgt.in"
-
-[solver]
-type = "fixed_step"
-step_size = 0.001
-communication_step = 0.001
-
-[wrapper]
-communication_step = 0.001
-"""
-        fd, path = tempfile.mkstemp(suffix=".toml")
-        os.write(fd, spec_str.encode())
-        os.close(fd)
-        try:
-            from cs_fmu_packager.spec import parse_spec
-            spec = parse_spec(path)
-            assert spec.variables == [], f"Expected empty variables, got {spec.variables}"
-        finally:
-            os.unlink(path)
+        spec_path = _make_simple_ssp(
+            str(tmp_path),
+            connectors=[],
+        )
+        spec = parse_spec(spec_path, workspace_dir=str(tmp_path / "ws"))
+        assert spec.variables == [], f"Expected empty variables, got {spec.variables}"
 
 
 @pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
@@ -235,7 +198,7 @@ class TestBuildReport:
 
         with tempfile.TemporaryDirectory() as d:
             report = BuildReport(
-                spec_path="spec.toml",
+                spec_path="spec.ssp",
                 output_path="out.fmu",
                 tool_version="0.1.0",
                 fmu_count=2,
@@ -281,58 +244,48 @@ except ImportError:
     pass
 
 
-def _generate_chain_spec(work_dir: str) -> str:
-    """Write a chained integrator -> gain spec and return its path."""
+def _generate_chain_ssp(work_dir: str) -> str:
+    """Write a complete ``chain.ssp`` archive (integrator -> gain) and return its path."""
+    from xml.etree import ElementTree as ET
+
+    from tests.helpers import build_ssp_document
+    from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+
     integrator = os.path.join(work_dir, "integrator.fmu")
     gain = os.path.join(work_dir, "gain.fmu")
-    spec = os.path.join(work_dir, "chain.toml")
-    with open(spec, "w") as f:
-        f.write(f'''
-[metadata]
-identifier = "chain_test"
-description = "integrator -> gain chain composite"
+    ssp_path = os.path.join(work_dir, "chain.ssp")
 
-[fmus]
-m00 = {{ path = "{integrator}", fmi_version = "2.0", kind = "ModelExchange" }}
-m01 = {{ path = "{gain}", fmi_version = "2.0", kind = "ModelExchange" }}
+    solver = ET.Element("Solver")
+    solver.set("type", "fixed_step")
+    solver.set("stepSize", "0.001")
+    solver.set("communicationStep", "0.01")
+    wrapper = ET.Element("Wrapper")
+    wrapper.set("communicationStep", "0.01")
 
-[[connections]]
-source = "m00.y"
-target = "m01.u"
-
-[[variables]]
-name = "u[1]"
-type = "Real"
-causality = "input"
-target = "m00.u"
-
-[[variables]]
-name = "y[1]"
-type = "Real"
-causality = "output"
-source = "m01.y"
-
-[[variables]]
-name = "m00.y[1]"
-type = "Real"
-causality = "output"
-source = "m00.y"
-
-[[variables]]
-name = "m01.y[1]"
-type = "Real"
-causality = "output"
-source = "m01.y"
-
-[solver]
-type = "fixed_step"
-step_size = 0.001
-communication_step = 0.01
-
-[wrapper]
-communication_step = 0.01
-''')
-    return spec
+    document = build_ssp_document(
+        name="chain_test",
+        fmu_sources={
+            "m00": "resources/integrator.fmu",
+            "m01": "resources/gain.fmu",
+        },
+        connectors=[
+            {"element": "m00/u", "name": "u[1]", "kind": "input", "type_name": "Real"},
+            {"element": "m01/y", "name": "y[1]", "kind": "output", "type_name": "Real"},
+            {"element": "m00/y", "name": "m00.y[1]", "kind": "output", "type_name": "Real"},
+            {"element": "m01/y", "name": "m01.y[1]", "kind": "output", "type_name": "Real"},
+        ],
+        connections=[("m00", "y", "m01", "u")],
+        annotations=[("cs-fmu-packager", [solver, wrapper])],
+    )
+    with zipfile.ZipFile(ssp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(document))
+        for member, fmu in (
+            ("resources/integrator.fmu", integrator),
+            ("resources/gain.fmu", gain),
+        ):
+            with open(fmu, "rb") as f:
+                zf.writestr(member, f.read())
+    return ssp_path
 
 
 def _trajectory(result):
@@ -363,14 +316,14 @@ class TestMultiFmuEndToEnd:
         for fname in ("integrator.fmu", "gain.fmu"):
             assert os.path.isfile(os.path.join(work, fname)), f"missing {fname}"
 
-        # 2. Write the chained spec.
-        spec = _generate_chain_spec(work)
+        # 2. Write the chained .ssp package.
+        ssp = _generate_chain_ssp(work)
         out_fmu = os.path.join(work, "chain.fmu")
 
         # 3. Build + package via the CLI.
         vcpkg_root = os.environ.get("VCPKG_ROOT")
         cmd = [
-            sys.executable, "-m", "cs_fmu_packager", spec,
+            sys.executable, "-m", "cs_fmu_packager", ssp,
             "-o", out_fmu, "--vcpkg-root", vcpkg_root,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
@@ -427,10 +380,10 @@ class TestMultiFmuEndToEnd:
             [sys.executable, _GENERATE_SCRIPT, work],
             check=True, capture_output=True, text=True, timeout=300,
         )
-        spec = _generate_chain_spec(work)
+        ssp = _generate_chain_ssp(work)
         out_fmu = os.path.join(work, "chain.fmu")
         cmd = [
-            sys.executable, "-m", "cs_fmu_packager", spec,
+            sys.executable, "-m", "cs_fmu_packager", ssp,
             "-o", out_fmu, "--vcpkg-root", os.environ.get("VCPKG_ROOT"),
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)

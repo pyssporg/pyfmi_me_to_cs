@@ -21,6 +21,7 @@
 | IMP-011 | Test fixture improvements   | Evolution | Completed | 2026-06-05 | `tests/conftest.py`, `tests/fixtures/` |
 | IMP-013 | Optional `[[variables]]` + pyssp-standard backend | Evolution | Completed | 2026-06-05 | `src/cs_fmu_packager/fmu_reader.py`, `src/cs_fmu_packager/spec.py`, `src/cs_fmu_packager/mapper.py`, `pyproject.toml`, `tests/` |
 | IMP-014 | Modelica-based test fixture generation and behavioral verification | Evolution | Completed | 2026-06-08 | `tests/fixtures/modelica/`, `tests/fixtures/generate_test_fmus.py`, `tests/fixtures/cs_verification.py`, `tests/test_cs_behavior_verification.py`, `Makefile`, `pyproject.toml`, `.github/workflows/test.yml`, `product-breakdown/04-verification/test-strategy.md`, `product-breakdown/06-evolution/risks.md` |
+| IMP-029 | Adopt complete `.ssp` as sole package specification input (SSP 1.0 SSD + embedded FMUs); remove TOML | Evolution | Completed | 2026-09-15 | `src/cs_fmu_packager/ssp_spec.py` (new), `src/cs_fmu_packager/spec.py` (deleted), `src/cs_fmu_packager/cli.py`, `pyproject.toml` (drop `toml`), `tests/test_ssp_spec.py` (new), `tests/test_spec_validation.py` (deleted), `README.md`, `GETTING_STARTED.md`, `product-breakdown/03-implementation/modules/ssp_spec.md`, `product-breakdown/04-verification/test-cases/test_ssp_spec.md` |
 
 ### Constraints
 

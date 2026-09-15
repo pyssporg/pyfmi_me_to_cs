@@ -42,7 +42,7 @@ add corresponding tests in the `tests/` directory.
 
 To run a specific test file:
 ```bash
-pytest tests/test_spec_validation.py -v
+pytest tests/test_ssp_spec.py -v
 ```
 
 ## Project Structure
@@ -51,7 +51,7 @@ A quick overview of key directories and files:
 | Path | Purpose |
 |------|---------|
 | `src/cs_fmu_packager/` | Python package source code |
-| `src/cs_fmu_packager/spec.py` | TOML spec parser and validator |
+| `src/cs_fmu_packager/ssp_spec.py` | SSP package (`.ssp`) parser and normalizer |
 | `src/cs_fmu_packager/cli.py` | CLI entry point (Click command) |
 | `src/cs_fmu_packager/builder.py` | CMake build orchestration |
 | `src/cs_fmu_packager/mapper.py` | Spec-to-FMU variable mapping |
