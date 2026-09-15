@@ -2,16 +2,21 @@
 
 [![CI](https://github.com/pyssporg/pyfmi_me_to_cs/actions/workflows/test.yml/badge.svg)](https://github.com/pyssporg/pyfmi_me_to_cs/actions/workflows/test.yml)
 
-Package one or more FMI 2.0 Model Exchange FMUs into a single FMI 2.0 Co-Simulation FMU.
+Convert a complete SSP package (`.ssp`) — one or more FMI 2.0 Model Exchange FMUs wired
+together in a `SystemStructure.ssd` — into a single FMI 2.0 Co-Simulation FMU (`.fmu`).
 
-The packaged FMU exposes a normal Co-Simulation interface to an external master algorithm,
-while internally instantiating Model Exchange FMUs, connects their variables, advances them
-with a configurable local solver, and exposes selected inputs, outputs, parameters, and status
-information at the wrapper boundary.
+```
+SSP package (.ssp) ──► cs-fmu-packager ──► Co-Simulation FMU (.fmu)
+```
+
+The output CS FMU exposes a normal Co-Simulation interface to an external master algorithm,
+while internally instantiating the packaged Model Exchange FMUs, connecting their variables,
+advancing them with a configurable local solver, and exposing selected inputs, outputs,
+parameters, and status information at the wrapper boundary.
 
 For design intent, full scope, and architectural motivation, see
-[cs-fmu-packager-project/README.md](cs-fmu-packager-project/README.md) and
-[product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md).
+[product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) and
+[product-breakdown/README.md](product-breakdown/README.md).
 
 ## Prerequisites
 
@@ -99,6 +104,21 @@ python -m cs_fmu_packager my_system.ssp
 This produces `my_system.fmu`. Add `--verbose` to see the full pipeline output,
 or `--dry-run` to validate the package and inspect FMUs without building.
 
+## How It Works
+
+The packager runs a six-phase pipeline from the input `.ssp` to the output CS FMU:
+
+1. **Parse** — read `SystemStructure.ssd` from the archive and extract the embedded
+   Model Exchange FMUs (see `product-breakdown/03-implementation/modules/ssp_spec.md`).
+2. **Inspect** — read each internal FMU's `modelDescription.xml`.
+3. **Map** — resolve boundary connectors and internal connections to FMU variables,
+   detect algebraic loops, and compute the execution order.
+4. **Codegen** — generate a C wrapper that instantiates the FMUs, wires their
+   variables, and runs the local fixed-step solver.
+5. **Build** — compile the wrapper into a shared library with CMake + vcpkg/SUNDIALS.
+6. **Package** — assemble the library, embedded FMUs, and a fresh
+   `modelDescription.xml` into the output Co-Simulation FMU.
+
 ## CLI Usage
 
 ```
@@ -119,6 +139,6 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 
 ## Documentation
 
-- [cs-fmu-packager-project/README.md](cs-fmu-packager-project/README.md) — design intent, scope, and project overview
+- [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, and project overview
 - [product-breakdown/](product-breakdown/) — full product breakdown structure (7 layers: intent, product, architecture, implementation, verification, operation, evolution)
 - [product-breakdown/decision-log.md](product-breakdown/decision-log.md) — architecture decisions (AD-001 through AD-007)

@@ -1,6 +1,15 @@
 # Getting Started with cs-fmu-packager
 
-This guide walks you through your first Co-Simulation FMU build using cs-fmu-packager. By the end, you will have created a package spec, inspected your FMUs, built the packaged CS-FMU, and verified the output.
+This guide walks you through your first Co-Simulation FMU build using cs-fmu-packager.
+You start with a **complete SSP package** (`.ssp`) and end with a single FMI 2.0
+Co-Simulation FMU (`.fmu`):
+
+```
+SSP package (.ssp) ──► cs-fmu-packager ──► Co-Simulation FMU (.fmu)
+```
+
+By the end, you will have assembled an `.ssp` package, inspected your FMUs,
+built the packaged CS-FMU, and verified the output.
 
 ## Prerequisites
 
@@ -166,7 +175,7 @@ This prints each pipeline phase and any warnings from the mapping step.
 
 - [README.md](README.md) — project overview, CLI reference, prerequisites
 - [CONTRIBUTING.md](CONTRIBUTING.md) — developer guide and how to contribute
-- [cs-fmu-packager-project/README.md](cs-fmu-packager-project/README.md) — design intent, scope, architecture motivation
+- [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, architecture motivation
 - [product-breakdown/](product-breakdown/) — full product breakdown structure
 - [product-breakdown/02-architecture/decisions/](product-breakdown/02-architecture/decisions/) — architecture decision records
 - [product-breakdown/06-evolution/candidates/](product-breakdown/06-evolution/candidates/) — proposed improvements and feature candidates

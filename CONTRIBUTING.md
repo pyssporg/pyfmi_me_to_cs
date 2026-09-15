@@ -13,7 +13,7 @@
 
 ## Getting Started
 - If you are new to the project, start with GETTING_STARTED.md for a from-scratch walkthrough and README.md for an overview.
-- `cs-fmu-packager-project/README.md` explains design intent and scope.
+- `product-breakdown/00-intent/purpose.md` explains design intent and scope.
 
 ## Development Setup
 1. Clone the repository.
