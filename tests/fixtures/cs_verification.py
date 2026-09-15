@@ -21,6 +21,7 @@ def verify_cs_behavior(
     step_size: float = 0.01,
     rtol: float = 1e-4,
     atol: float = 1e-6,
+    input_signal=None,
 ) -> dict:
     """Simulate both reference and artifact CS FMUs and compare trajectories.
 
@@ -38,6 +39,10 @@ def verify_cs_behavior(
         rtol, atol:
             Relative and absolute tolerances for
             :func:`numpy.allclose`.
+        input_signal:
+            Optional external input signal for the boundary inputs,
+            passed verbatim as ``fmpy.simulate_fmu(..., input=input_signal)``.
+            *None* (the default) leaves the inputs at their start values.
 
     Returns:
         A dict with keys:
@@ -81,12 +86,14 @@ def verify_cs_behavior(
         start_time=start_time,
         stop_time=stop_time,
         step_size=step_size,
+        input=input_signal,
     )
     art_result = fmpy.simulate_fmu(
         art_fmu,
         start_time=start_time,
         stop_time=stop_time,
         step_size=step_size,
+        input=input_signal,
     )
 
     ref_df = _ensure_dataframe(ref_result)

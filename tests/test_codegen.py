@@ -2,14 +2,21 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
+from xml.etree import ElementTree as ET
 
 import pytest
 
 from cs_fmu_packager.codegen.cmake import generate_cmake
+from cs_fmu_packager.codegen.fixed_point import generate_fixed_point_impl
 from cs_fmu_packager.codegen.fmi_interface import generate_fmi_interface_impl
+from cs_fmu_packager.codegen.solver import generate_solver_impl
+from cs_fmu_packager.mapper import _auto_discover_variables, build_mapping
 from cs_fmu_packager.model_description import generate_model_description
 from cs_fmu_packager.models import (
+    AlgebraicLoop,
+    Connection,
     FmuRef,
     MappingTable,
     MappedVariable,
@@ -17,11 +24,17 @@ from cs_fmu_packager.models import (
     ResolvedConnection,
     SolverConfig,
     WrapperConfig,
+    WrapperVariable,
+)
+from pyssp_standard.standard.fmi2.codec.model_description_xml_codec import (
+    Fmi2ModelDescriptionXmlCodec,
 )
 from pyssp_standard.standard.fmi2.model.model_description import (
+    Fmi2InterfaceAttributes,
     Fmi2ModelDescriptionDocument,
     Fmi2ScalarVariable,
 )
+from tests.helpers import make_test_fmu
 
 
 @pytest.fixture
@@ -168,15 +181,74 @@ class TestModelDescriptionCodegen:
         """Codegen should work with auto-discovered variables (empty spec.variables)."""
         spec = PackageSpec(
             metadata={"identifier": "auto_test"},
-            fmus={},
+            fmus={"fmu1": FmuRef(name="fmu1", path="/fake/fmu1.fmu")},
             connections=[],
             variables=[],  # Empty — simulates auto-discovery
             solver=SolverConfig(type="fixed_step", step_size=0.001, communication_step=0.001),
-            wrapper=None,
+            wrapper=WrapperConfig(communication_step=0.001),
         )
-        # This should not raise — codegen doesn't directly iterate spec.variables
-        # It uses the mapping table which is populated by build_mapping
-        assert spec.variables == []
+        doc = Fmi2ModelDescriptionDocument(
+            root=None, fmi_version="2.0", model_name="AutoFMU", guid="{auto}",
+            variables=[
+                Fmi2ScalarVariable(name="in1", value_reference=0, type_name="Real", causality="input"),
+                Fmi2ScalarVariable(name="out1", value_reference=1, type_name="Real", causality="output"),
+                Fmi2ScalarVariable(name="param1", value_reference=2, type_name="Real", causality="parameter"),
+            ],
+            unit_definitions=[], type_definitions=[], model_structure=None,
+            capabilities=Fmi2InterfaceAttributes(model_identifier="auto_model"),
+        )
+
+        # Resolve auto-discovered variables the way build_mapping would.
+        discovered = _auto_discover_variables({"fmu1": doc})
+        doc_vars = {v.name: v for v in doc.variables}
+        wrapper_inputs, wrapper_outputs, wrapper_parameters = [], [], []
+        for wv in discovered:
+            mapped = MappedVariable(
+                wrapper_name=wv.name,
+                variable_type=wv.type,
+                causality=wv.causality,
+                target_fmu=wv.target_fmu,
+                target_variable=wv.target_variable,
+                target_value_reference=(
+                    doc_vars[wv.target_variable].value_reference
+                    if wv.target_variable else None
+                ),
+                source_fmu=wv.source_fmu,
+                source_variable=wv.source_variable,
+                source_value_reference=(
+                    doc_vars[wv.source_variable].value_reference
+                    if wv.source_variable else None
+                ),
+            )
+            if wv.causality == "input":
+                wrapper_inputs.append(mapped)
+            elif wv.causality == "output":
+                wrapper_outputs.append(mapped)
+            else:
+                wrapper_parameters.append(mapped)
+
+        mapping = MappingTable(
+            fmus={"fmu1": doc},
+            wrapper_inputs=wrapper_inputs,
+            wrapper_outputs=wrapper_outputs,
+            wrapper_parameters=wrapper_parameters,
+            execution_order=["fmu1"],
+        )
+
+        model_xml = generate_model_description(spec, mapping)
+        for name in ("in1", "out1", "param1"):
+            assert f'name="{name}"' in model_xml
+
+        interface_c = generate_fmi_interface_impl(spec, mapping)
+        # The C snippet addresses boundary variables by array index ([j].vr) and
+        # per-type role, so assert the wiring derived from the auto-discovery:
+        # exactly one real input, one real output, and one real parameter.
+        assert "inst->num_real_inputs = 1;" in interface_c
+        assert "inst->num_real_outputs = 1;" in interface_c
+        assert "inst->num_real_params = 1;" in interface_c
+        assert "inst->real_inputs[0].vr = 1;" in interface_c
+        assert "inst->real_outputs[0].vr = 1;" in interface_c
+        assert "inst->real_params[0].vr = 1;" in interface_c
 
 
 class TestCHeadersResolution:
@@ -287,3 +359,209 @@ class TestFmiInterfaceCodegen:
             "If the change is intentional, regenerate the golden file:\n"
             f"  {golden_path}\n"
         )
+
+
+class TestSolverCodegen:
+    """Tests for solver_integration.c generation."""
+
+    def test_generate_solver_impl(self, sample_spec, sample_mapping):
+        """ARKODE wrapper includes header, init, step, combined RHS, and header comment."""
+        content = generate_solver_impl(sample_spec, sample_mapping)
+        assert '#include "solver_integration.h"' in content
+        assert "int solver_init(WrapperInstance* wrapper)" in content
+        assert "solver_step" in content
+        assert "combined_rhs" in content
+        assert "ARKStepCreate" in content
+        assert "Generated by cs-fmu-packager for: test_fmu" in content
+        assert "Total continuous states: 0" in content
+
+    def test_continuous_state_count_from_local_variables(self):
+        """Local continuous variables (excluding der(...)) count as states."""
+        doc = Fmi2ModelDescriptionDocument(
+            root=None, fmi_version="2.0", guid="{g}", model_name="TestFMU",
+            variables=[
+                Fmi2ScalarVariable(name="x", value_reference=0, type_name="Real",
+                                   causality="local", variability="continuous"),
+                Fmi2ScalarVariable(name="der(x)", value_reference=1, type_name="Real",
+                                   causality="local", variability="continuous"),
+            ],
+            unit_definitions=[], type_definitions=[], model_structure=None,
+        )
+        spec = PackageSpec(
+            metadata={"identifier": "test_fmu"},
+            fmus={"fmu1": FmuRef(name="fmu1", path="/fake/fmu1.fmu")},
+            solver=SolverConfig(),
+            wrapper=WrapperConfig(),
+        )
+        mapping = MappingTable(fmus={"fmu1": doc}, execution_order=["fmu1"])
+        content = generate_solver_impl(spec, mapping)
+        assert "Total continuous states: 1" in content
+        assert "fmu1: TestFMU, nx=1" in content
+
+
+class TestFixedPointCodegen:
+    """Tests for fixed_point_iteration.c generation."""
+
+    def test_generate_fixed_point_impl(self, sample_spec, sample_mapping):
+        content = generate_fixed_point_impl(sample_spec, sample_mapping)
+        assert "fixed_point_solve_loop" in content
+        assert "fixed_point_resolve_all" in content
+        assert "Algebraic loops detected: 0" in content
+
+    def test_algebraic_loop_parameters_and_wiring(self):
+        """Loop detection, max_iterations/tolerance, and fmi2_interface wiring."""
+        spec = PackageSpec(
+            metadata={"identifier": "loop_test"},
+            fmus={
+                "A": FmuRef(name="A", path="/fake/a.fmu"),
+                "B": FmuRef(name="B", path="/fake/b.fmu"),
+            },
+            solver=SolverConfig(type="fixed_step", step_size=0.001, communication_step=0.01),
+            wrapper=WrapperConfig(communication_step=0.01),
+        )
+        spec.solver.algebraic_loop.max_iterations = 50
+        spec.solver.algebraic_loop.tolerance = 1e-8
+
+        def _doc(name: str, model_identifier: str) -> Fmi2ModelDescriptionDocument:
+            return Fmi2ModelDescriptionDocument(
+                root=None, fmi_version="2.0", guid=f"{{{name}}}", model_name=name,
+                variables=[
+                    Fmi2ScalarVariable(name="u", value_reference=0, type_name="Real", causality="input"),
+                    Fmi2ScalarVariable(name="y", value_reference=1, type_name="Real", causality="output"),
+                ],
+                unit_definitions=[], type_definitions=[], model_structure=None,
+                capabilities=Fmi2InterfaceAttributes(model_identifier=model_identifier),
+            )
+
+        conn_ab = ResolvedConnection(
+            source_fmu="A", source_variable="y", source_value_reference=1,
+            target_fmu="B", target_variable="u", target_value_reference=0,
+        )
+        conn_ba = ResolvedConnection(
+            source_fmu="B", source_variable="y", source_value_reference=1,
+            target_fmu="A", target_variable="u", target_value_reference=0,
+        )
+        mapping = MappingTable(
+            fmus={"A": _doc("FMU_A", "a_model"), "B": _doc("FMU_B", "b_model")},
+            wrapper_inputs=[
+                MappedVariable(wrapper_name="input1", variable_type="Real", causality="input",
+                               target_fmu="A", target_variable="u", target_value_reference=0),
+            ],
+            wrapper_outputs=[
+                MappedVariable(wrapper_name="output1", variable_type="Real", causality="output",
+                               source_fmu="B", source_variable="y", source_value_reference=1),
+            ],
+            connections=[conn_ab, conn_ba],
+            algebraic_loops=[
+                AlgebraicLoop(fmus=["A", "B"], connections=[conn_ab, conn_ba]),
+            ],
+        )
+
+        content = generate_fixed_point_impl(spec, mapping)
+        assert "Algebraic loops detected: 1" in content
+        assert "Max iterations: 50, Tolerance: 1e-08" in content
+
+        interface = generate_fmi_interface_impl(spec, mapping)
+        assert "fixed_point_resolve_all(inst" in interface
+        assert "inst->num_algebraic_loops = 1;" in interface
+        assert "inst->algebraic_loop_max_iterations = 50;" in interface
+        assert "inst->algebraic_loop_tolerance = 1e-08;" in interface
+
+
+class TestBoundaryValueReferenceConsistency:
+    """Wrapper valueReference ordering invariant: mapper, XML, and C init code."""
+
+    @pytest.fixture
+    def fmu_dir(self, tmp_path) -> str:
+        return str(tmp_path)
+
+    @staticmethod
+    def _write_test_fmu(path: str, name: str, guid: str, vars_xml: str) -> None:
+        model_desc = f"""<?xml version="1.0" encoding="UTF-8"?>
+<fmiModelDescription
+  fmiVersion="2.0"
+  modelName="{name}"
+  guid="{guid}"
+  generationTool="test"
+  numberOfEventIndicators="0"
+>
+  <ModelExchange modelIdentifier="{name}" />
+  <ModelVariables>
+    {vars_xml}
+  </ModelVariables>
+</fmiModelDescription>"""
+        make_test_fmu(path, model_desc)
+
+    def test_value_reference_ordering_consistency(self, fmu_dir):
+        real_input = '<ScalarVariable name="u" valueReference="0" causality="input"><Real/></ScalarVariable>'
+        real_output = '<ScalarVariable name="y" valueReference="1" causality="output"><Real/></ScalarVariable>'
+        src_path = os.path.join(fmu_dir, "src.fmu")
+        tgt_path = os.path.join(fmu_dir, "tgt.fmu")
+        self._write_test_fmu(src_path, "SourceFMU", "{src-guid}", real_input + real_output)
+        self._write_test_fmu(tgt_path, "TargetFMU", "{tgt-guid}", real_input + real_output)
+
+        spec = PackageSpec(
+            metadata={"identifier": "vr_order"},
+            fmus={
+                "src": FmuRef(name="src", path=src_path),
+                "tgt": FmuRef(name="tgt", path=tgt_path),
+            },
+            connections=[
+                Connection(source_fmu="src", source_variable="y", target_fmu="tgt", target_variable="u"),
+            ],
+            # Shuffled causality order — grouping must happen inside build_mapping.
+            variables=[
+                WrapperVariable(name="output1", causality="output", source_fmu="tgt", source_variable="y"),
+                WrapperVariable(name="input1", causality="input", target_fmu="src", target_variable="u"),
+                WrapperVariable(name="param1", causality="parameter", target_fmu="src", target_variable="u"),
+                WrapperVariable(name="input2", causality="input", target_fmu="tgt", target_variable="u"),
+                WrapperVariable(name="output2", causality="output", source_fmu="src", source_variable="y"),
+            ],
+            solver=SolverConfig(),
+            wrapper=WrapperConfig(),
+        )
+        mapping = build_mapping(spec)
+        all_vars = mapping.all_variables()
+        n_vars = len(all_vars)
+        assert n_vars == 5
+
+        # Mapper assigns 1..N in all_variables() (inputs, outputs, params) order.
+        assert [m.wrapper_value_reference for m in all_vars] == list(range(1, n_vars + 1))
+
+        # modelDescription.xml: ScalarVariable elements appear in the same order,
+        # with the same value references.
+        xml = generate_model_description(spec, mapping)
+        root = ET.fromstring(xml)
+        scalar_vars = list(root.find("ModelVariables").findall("ScalarVariable"))
+        assert [sv.get("name") for sv in scalar_vars] == [m.wrapper_name for m in all_vars]
+        assert [int(sv.get("valueReference")) for sv in scalar_vars] == [
+            m.wrapper_value_reference for m in all_vars
+        ]
+
+        # C init code: the per-type vr assignments reference the same 1..N set
+        # with no duplicates.
+        interface = generate_fmi_interface_impl(spec, mapping)
+        vr_values = [
+            int(match.group(1))
+            for match in re.finditer(
+                r"inst->\w+_(?:inputs|outputs|params)\[\d+\]\.vr = (\d+);", interface
+            )
+        ]
+        assert sorted(vr_values) == list(range(1, n_vars + 1))
+        assert len(set(vr_values)) == n_vars
+
+
+class TestModelDescriptionRoundTrip:
+    """Round-trip the generated modelDescription.xml through an FMI 2 parser."""
+
+    def test_pyssp_model_description_round_trip(self, sample_spec, sample_mapping):
+        xml = generate_model_description(sample_spec, sample_mapping)
+        # Must at least be well-formed XML.
+        ET.fromstring(xml)
+        # Re-parse through pyssp_standard's FMI 2.0 model-description codec.
+        doc = Fmi2ModelDescriptionXmlCodec().parse(xml)
+        assert doc.fmi_version == "2.0"
+        assert doc.interface_type == "CoSimulation"
+        assert doc.model_name == "test_fmu"
+        assert [v.name for v in doc.variables] == ["input1", "output1"]
+        assert [v.value_reference for v in doc.variables] == [1, 2]

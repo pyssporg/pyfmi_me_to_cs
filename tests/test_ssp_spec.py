@@ -319,3 +319,191 @@ class TestBoundaryVariables:
         )
         spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
         assert spec.variables == []  # mapper auto-discovery fills these (IMP-013)
+
+
+class TestTolerantNamespaceRemapping:
+    """Non-canonical SSD roots/namespaces are normalized before parsing."""
+
+    _VARIANT_SSD = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<SystemStructure xmlns="http://example.com/ns" '
+        'xmlns:ssc="http://ssp-standard.org/SSP1/SystemStructureCommon" '
+        'name="test_sys" version="1.0">\n'
+        '  <System name="System">\n'
+        '    <Connectors>\n'
+        '      <Connector name="input1" kind="input" element="src/u">\n'
+        '        <ssc:Real/>\n'
+        '      </Connector>\n'
+        '      <Connector name="output1" kind="output" element="tgt/y">\n'
+        '        <ssc:Real/>\n'
+        '      </Connector>\n'
+        '    </Connectors>\n'
+        '    <Elements>\n'
+        '      <Component name="src" source="resources/src.fmu"/>\n'
+        '      <Component name="tgt" source="resources/tgt.fmu"/>\n'
+        '    </Elements>\n'
+        '    <Connections>\n'
+        '      <Connection startElement="src" startConnector="y" '
+        'endElement="tgt" endConnector="u"/>\n'
+        '    </Connections>\n'
+        '  </System>\n'
+        '</SystemStructure>'
+    )
+
+    @staticmethod
+    def _write_ssp(tmp_path, ssd_xml, name="variant.ssp"):
+        from tests.helpers import make_fmu_bytes
+        path = os.path.join(str(tmp_path), name)
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("SystemStructure.ssd", ssd_xml)
+            zf.writestr("resources/src.fmu", make_fmu_bytes())
+            zf.writestr("resources/tgt.fmu", make_fmu_bytes())
+        return path
+
+    def test_foreign_root_tag_and_namespace_normalized(self, tmp_path):
+        ssp_path = self._write_ssp(tmp_path, self._VARIANT_SSD)
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.metadata["identifier"] == "test_sys"
+        assert set(spec.fmus) == {"src", "tgt"}
+        assert len(spec.connections) == 1
+        assert spec.connections[0].source_fmu == "src"
+        assert spec.connections[0].source_variable == "y"
+        assert spec.connections[0].target_fmu == "tgt"
+        assert spec.connections[0].target_variable == "u"
+        assert [v.name for v in spec.variables] == ["input1", "output1"]
+        assert spec.variables[0].causality == "input"
+        assert spec.variables[1].causality == "output"
+
+    def test_missing_root_name_and_version_defaulted(self, tmp_path):
+        ssd = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<SystemStructure xmlns="http://example.com/ns">\n'
+            '  <System name="System">\n'
+            '    <Elements>\n'
+            '      <Component name="src" source="resources/src.fmu"/>\n'
+            '    </Elements>\n'
+            '  </System>\n'
+            '</SystemStructure>'
+        )
+        ssp_path = self._write_ssp(tmp_path, ssd)
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.metadata["identifier"] == "system"
+
+
+class TestConfigErrorPaths:
+    """Invalid numeric config annotation values raise SpecValidationError."""
+
+    @pytest.mark.parametrize("value", ["0", "-1", "abc"])
+    def test_invalid_step_size_rejected(self, make_ssp, tmp_path, value):
+        solver = ET.Element("Solver")
+        solver.set("type", "fixed_step")
+        solver.set("stepSize", value)
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[],
+            annotations=[("cs-fmu-packager", [solver])],
+        )
+        with pytest.raises(SpecValidationError) as exc:
+            parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert "stepSize" in str(exc.value)
+        assert "must be a positive" in str(exc.value)
+
+    @pytest.mark.parametrize("value", ["0", "-3", "x"])
+    def test_invalid_max_iterations_rejected(self, make_ssp, tmp_path, value):
+        loop = ET.Element("AlgebraicLoop")
+        loop.set("maxIterations", value)
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[],
+            annotations=[("cs-fmu-packager", [loop])],
+        )
+        with pytest.raises(SpecValidationError) as exc:
+            parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert "maxIterations" in str(exc.value)
+        assert "must be a positive" in str(exc.value)
+
+
+class TestConnectorKinds:
+    """Connector kinds map onto wrapper variable causalities."""
+
+    def test_inout_kind_maps_to_input(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/u", "name": "io", "kind": "inout", "type_name": "Real"},
+            ],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert len(spec.variables) == 1
+        var = spec.variables[0]
+        assert var.causality == "input"
+        assert var.target_fmu == "src"
+        assert var.target_variable == "u"
+
+
+class TestParameterValueCoercion:
+    """Parameter start values are coerced to typed Python values."""
+
+    def test_integer_parameter_start_is_int(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "Integer"},
+            ],
+            parameters=[("src/p", "Integer", 42)],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        start = spec.variables[0].start
+        assert start == 42
+        assert isinstance(start, int)
+
+    def test_boolean_parameter_start_true(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "Boolean"},
+            ],
+            parameters=[("src/p", "Boolean", True)],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.variables[0].start is True
+
+    def test_boolean_parameter_from_string_true(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "Boolean"},
+            ],
+            parameters=[("src/p", "Boolean", "TRUE")],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.variables[0].start is True
+
+    def test_uncoercible_parameter_start_none(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "Real"},
+            ],
+            parameters=[("src/p", "Real", "not-a-number")],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.variables[0].start is None
+
+
+class TestNestedSystemRejected:
+    """Nested <System> elements are not supported at the top level."""
+
+    def test_nested_system_element_rejected(self, tmp_path):
+        from tests.helpers import build_ssp_document
+        from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+        from pyssp_standard.standard.ssp1.model.ssd_model import Ssd1System
+        doc = build_ssp_document(fmu_sources={"src": "resources/src.fmu"})
+        doc.system.elements.append(Ssd1System(name="nested"))
+        path = os.path.join(str(tmp_path), "nested.ssp")
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(doc))
+            zf.writestr("resources/src.fmu", b"data")
+        with pytest.raises(SpecValidationError) as exc:
+            parse_spec(path, workspace_dir=str(tmp_path))
+        assert "nested <System> elements are not supported" in str(exc.value)

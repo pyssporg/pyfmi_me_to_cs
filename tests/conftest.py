@@ -17,6 +17,30 @@ from tests.helpers import build_ssp_document, make_fmu_bytes, make_test_fmu
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BUILD_TEST_DIR = os.path.join(_REPO_ROOT, "build", "test")
+
+
+def _sanitize_path_segment(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+
+
+@pytest.fixture
+def artifact_dir(request) -> str:
+    """Persistent per-test artifact directory under ``build/test/``.
+
+    Heavy pipeline tests (OMC FMU generation, packaging, simulation) write
+    every intermediate and result here so they survive for manual review
+    after the test run.  The directory is intentionally NOT cleaned up;
+    the most recent run for a given test wins.
+    """
+    module = os.path.splitext(os.path.basename(request.module.__file__))[0]
+    path = os.path.join(
+        BUILD_TEST_DIR, _sanitize_path_segment(module), _sanitize_path_segment(request.node.name)
+    )
+    os.makedirs(path, exist_ok=True)
+    return path
+
 
 @pytest.fixture
 def fixtures_dir() -> str:

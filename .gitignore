@@ -8,6 +8,9 @@ opencode.json
 
 __pycache__/
 
+# Test build artifacts (kept under build/test/ for manual review)
+build/
+
 # OMC build artifacts
 *.log
 *.libs
