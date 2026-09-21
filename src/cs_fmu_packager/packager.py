@@ -6,7 +6,6 @@ Assembles the final FMU ZIP archive with deterministic properties
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -43,15 +42,6 @@ def _model_identifier_for(mapping: MappingTable, fmu_id: str) -> Optional[str]:
     if caps is not None and getattr(caps, "model_identifier", None):
         return caps.model_identifier
     return None
-
-
-def _compute_checksum(path: str) -> str:
-    """Compute SHA-256 checksum of a file."""
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _inner_model_identifier(path: str) -> Optional[str]:

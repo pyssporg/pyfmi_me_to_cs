@@ -122,8 +122,7 @@ class TestFmuInspection:
         make_test_fmu(tmp_fmu_path, model_desc_wrong)
         with pytest.raises(FmuInspectionError) as exc:
             inspect_fmu(tmp_fmu_path)
-        # The fork cannot parse non-FMI-2.0 documents at all
-        assert "Failed to read FMU" in str(exc.value)
+        assert "unsupported FMI version '1.0'" in str(exc.value)
 
     def test_inspect_not_me_fmu(self, tmp_fmu_path):
         """CS-only FMU should be rejected."""
@@ -165,16 +164,12 @@ class TestFmuInspection:
             inspect_fmu(tmp_fmu_path)
         assert "invalid modelDescription.xml" in str(exc.value)
 
-    def test_inspect_fmi_1_0_docs_version_branch_unreachable(self, tmp_fmu_path):
-        """Document the FMI-version branch in fmu_reader.py:59-62.
+    def test_inspect_fmi_1_0_docs_version_branch_reachable(self, tmp_fmu_path):
+        """The FMI-version branch in fmu_reader.py is reachable.
 
-        A fmiVersion="2.0" + CoSimulation doc is rejected with "not a
-        ModelExchange" (see test_inspect_not_me_fmu), so the "unsupported
-        FMI version" branch is only reachable for a parsed 2.0 doc that is
-        not ME -- which never happens since interface_type would be CS.
-        A fmiVersion="1.0" doc never reaches the dedicated version branch
-        either: the parser rejects non-2.0 documents first, so the generic
-        "Failed to read FMU" path fires instead.
+        The pre-parse raw-XML check rejects FMI 1.x documents with a dedicated
+        message (the pyssp_standard parser cannot parse them at all, so without
+        the check the user would only ever see the generic parse error).
         """
         model_desc_10 = """<?xml version="1.0" encoding="UTF-8"?>
 <fmiModelDescription fmiVersion="1.0" modelName="OldFMU" guid="abc">
@@ -183,7 +178,7 @@ class TestFmuInspection:
         make_test_fmu(tmp_fmu_path, model_desc_10)
         with pytest.raises(FmuInspectionError) as exc:
             inspect_fmu(tmp_fmu_path)
-        assert "Failed to read FMU" in str(exc.value)
+        assert "unsupported FMI version '1.0'" in str(exc.value)
 
     def test_inspect_integer_parameter_typed_metadata(self, tmp_fmu_path):
         """Non-Real variables expose type_name and value_reference."""

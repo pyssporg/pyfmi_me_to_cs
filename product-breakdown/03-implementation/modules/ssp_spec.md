@@ -24,7 +24,7 @@ XML handling is delegated to the `pyssp_standard` SSP 1.0 stack (`Ssp1SsdCodec`)
 - **Components**: `<Component source="...">` (type `application/x-fmu-sharedlibrary`) → `FmuRef`; `source` is a relative URI resolved inside the archive; the FMU bytes are extracted to `<workspace>/<name>.fmu`.
 - **Connections**: `<Connection startElement endElement startConnector endConnector>` → `Connection`. System-level (boundary) connections are rejected — the boundary is expressed through system connectors.
 - **Boundary variables (edge wiring)**: system `<Connectors>` → `WrapperVariable`; `kind` maps to causality (`input`→`input`, `output`→`output`, `parameter`→`parameter`, `calculatedParameter`→readable `output`, `inout`→`input`). Start values come from `<ParameterBindings>`/`<ParameterValues>`.
-- **Configuration**: solver/wrapper policy is carried by a vendor `<Annotations>` block (`type="cs-fmu-packager"`) with `Solver`/`AlgebraicLoop`/`Wrapper` elements; falls back to packaging defaults when absent. Announcement implies v1 constraints: solver type `fixed_step`, `step_size ≤ communication_step`, `solver.communication_step == wrapper.communication_step`.
+- **Configuration**: solver/wrapper policy is carried by a vendor `<Annotations>` block (`type="cs-fmu-packager"`) with `Solver`/`AlgebraicLoop`/`Wrapper` elements; falls back to packaging defaults when absent. The full schema, supported solver types, and defaults are documented in `docs/CONFIGURATION.md`. Validation constraints: solver type must be one of the supported types, `step_size ≤ communication_step`, `solver.communication_step == wrapper.communication_step`.
 - Component names must be unique; connector (boundary variable) names must be unique; connectors reference existing components.
 
 ## Source

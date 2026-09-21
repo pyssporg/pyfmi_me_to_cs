@@ -40,6 +40,8 @@ def generate_all(
     """
     generated: Dict[str, str] = {}
 
+    os.makedirs(output_dir, exist_ok=True)
+
     try:
         # Generate CMakeLists.txt
         cmake_content = generate_cmake(mapping, spec)

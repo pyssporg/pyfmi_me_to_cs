@@ -20,7 +20,10 @@ CLI entry point and pipeline orchestration. Provides a `click`-based command-lin
 | `SPEC` (positional) | Path to a complete SSP package (`.ssp`) |
 | `-o, --output` | Output FMU path (default: `<spec_name>.fmu`) |
 | `-r, --report` | Build report JSON output path |
-| `--vcpkg-root` | Path to vcpkg installation |
+| `--vcpkg-root` | Path to vcpkg installation (overrides `VCPKG_ROOT`) |
+| `--c-headers` | Path to a directory containing the FMI 2.0 C headers (default: auto-detect from package data) |
+| `--step-size` | Override the fixed-step size parsed from the vendor annotation |
+| `--communication-step` | Override the communication step parsed from the vendor annotation |
 | `--dry-run` | Validate package + inspect FMUs only (no build) |
 | `-v, --verbose` | Enable diagnostic logging |
 

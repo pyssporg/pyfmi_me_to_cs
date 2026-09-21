@@ -70,7 +70,7 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
         return NULL;
     }
 
-    if (strcmp(fmuGUID, "fa1130c8-a436-76bd-5c7c-72613e2ff651") != 0) {
+    if (strcmp(fmuGUID, "39148f49-c1e0-975a-576f-7a0bca46a6db") != 0) {
         return NULL;
     }
 

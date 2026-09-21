@@ -10,7 +10,12 @@ Candidate
 
 ## Status
 
-Reported (BLOCKING) — verified 2026-09-15 from `sim_arch_comparison` PD-005 P3 (packaged SCC-group realization)
+Resolved in the working tree (the six codegen defects and the runtime
+extraction gap below are fixed and verified) — superseded as an open
+blocker; kept as a candidate record for design history. See
+[Resolution](#resolution) and `06-evolution/done/IMP-029-ssp-ssd-input-format.md`
+Completion Notes. Originally reported (BLOCKING) 2026-09-15 from
+`sim_arch_comparison` PD-005 P3 (packaged SCC-group realization).
 
 ## Layer
 
@@ -69,6 +74,28 @@ Implemented in this working tree (upstream-quality; closes the runtime gap):
 
 Verified 2026-09-15: the two-node chain builds, packages, and simulates;
 CSV records `y[1]`, `m00.y[1]`, `m01.y[1]`. All `tests/` pass (54 tests).
+
+## Resolution
+
+The defects and the runtime gap described above are closed in the current
+working tree, not merely proposed:
+
+- `codegen/fmi2_interface.h` is emitted by `generate_all()` (`codegen/wrapper.py`),
+  and `solver_integration.h` / `fixed_point_iteration.h` templates are copied.
+- `fmi_interface.py` emits literal FMU indices (no `idx_*` aliases), variadic
+  `log_message`, correct `{model_identifier}` dlsym fallback prefixes, and the
+  `fmu2Real`→`fmi2Real` fix.
+- `packager.py` embeds each internal FMU's pre-extracted `binaries/` +
+  `resources/` trees under `resources/{id}/`, closing the runtime extraction
+  gap.
+- The two-ME-node chained e2e test (`tests/test_end_to_end.py::TestMultiFmuEndToEnd`,
+  integrator → gain, OMC-generated FMUs, fmpy master) builds, packages, and
+  simulates; guarded by `skipif` on vcpkg/omc/fmpy availability.
+
+The remaining risk is limited to real multi-node SCC groups (the documented
+`PassThroughNodeME` composites); the `sim_arch_comparison` P3 path should
+re-validate against them. IMP-028 therefore no longer blocks multi-FMU
+packaging.
 
 ## Proposed Fix Scope (for upstream)
 

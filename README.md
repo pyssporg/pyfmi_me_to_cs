@@ -87,13 +87,17 @@ Package it (plus the FMUs) into the archive:
 zip -r my_system.ssp SystemStructure.ssd resources/
 ```
 
-> **Note:** solver and wrapper configuration (step sizes, algebraic-loop
-> iteration policy) is carried by the optional `cs-fmu-packager` vendor
-> annotation and falls back to built-in defaults when absent. Every internal
-> FMU input, output, and parameter is accessible at the packaged boundary —
-> either through the system `<Connectors>` you declare, or automatically by
-> default. This enables get/set and observation of all internal values from an
-> external master (see [IMP-029](product-breakdown/06-evolution/done/IMP-029-ssp-ssd-input-format.md)).
+> **Note:** solver and wrapper configuration (solver type, step sizes,
+> tolerance, algebraic-loop iteration policy) is carried by the optional
+> `cs-fmu-packager` vendor annotation and falls back to built-in defaults when
+> absent. Every internal FMU input, output, and parameter is accessible at the
+> packaged boundary — either through the system `<Connectors>` you declare, or
+> automatically by default. This enables get/set and observation of all
+> internal values from an external master (see
+> [IMP-029](product-breakdown/06-evolution/done/IMP-029-ssp-ssd-input-format.md)).
+> The complete configuration reference is in
+> [docs/CONFIGURATION.md](docs/CONFIGURATION.md), and a fully runnable example
+> is in [examples/quickstart](examples/quickstart/README.md).
 
 Build the Co-Simulation FMU:
 
@@ -114,7 +118,7 @@ The packager runs a six-phase pipeline from the input `.ssp` to the output CS FM
 3. **Map** — resolve boundary connectors and internal connections to FMU variables,
    detect algebraic loops, and compute the execution order.
 4. **Codegen** — generate a C wrapper that instantiates the FMUs, wires their
-   variables, and runs the local fixed-step solver.
+   variables, and runs the configured local solver.
 5. **Build** — compile the wrapper into a shared library with CMake + vcpkg/SUNDIALS.
 6. **Package** — assemble the library, embedded FMUs, and a fresh
    `modelDescription.xml` into the output Co-Simulation FMU.
@@ -131,6 +135,7 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 | `-o, --output FILE` | Output FMU path (default: `<spec_basename>.fmu`) |
 | `-r, --report FILE` | Write a JSON build report to the given path |
 | `--vcpkg-root DIR` | Path to a vcpkg installation (overrides `VCPKG_ROOT`) |
+| `--c-headers DIR` | Path to a directory containing the FMI 2.0 C headers (default: auto-detect from package data) |
 | `--step-size FLOAT` | Override the fixed-step size parsed from the vendor annotation |
 | `--communication-step FLOAT` | Override the communication step parsed from the vendor annotation |
 | `--dry-run` | Validate package and inspect FMUs without building |
@@ -139,6 +144,10 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 
 ## Documentation
 
+- [docs/](docs/README.md) — user-facing documentation index
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — full configuration reference (vendor annotation schema, solver types, runtime solver parameters, defaults)
+- [examples/quickstart](examples/quickstart/README.md) — runnable example (build + simulate)
+- [GETTING_STARTED.md](GETTING_STARTED.md) — step-by-step walkthrough
 - [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, and project overview
 - [product-breakdown/](product-breakdown/) — full product breakdown structure (7 layers: intent, product, architecture, implementation, verification, operation, evolution)
 - [product-breakdown/decision-log.md](product-breakdown/decision-log.md) — architecture decisions (AD-001 through AD-007)

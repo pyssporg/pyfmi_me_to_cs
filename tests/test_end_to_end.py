@@ -168,7 +168,15 @@ class TestAssemblyWithoutBuild:
 
             fmu_path = os.path.join(d, "fake.fmu")
             with zipfile.ZipFile(fmu_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr("modelDescription.xml", "<fmiModelDescription/>")
+                zf.writestr(
+                    "modelDescription.xml",
+                    '<fmiModelDescription fmiVersion="2.0" modelName="internal" guid="{g}">'
+                    '<ModelExchange modelIdentifier="internal_model"/>'
+                    "<ModelVariables/></fmiModelDescription>",
+                )
+                # IMP-028 runtime payload that the pyssp pathway must re-embed.
+                zf.writestr("binaries/linux64/internal_model.so", b"\x7fELF-inner")
+                zf.writestr("resources/data.txt", b"payload")
 
             from cs_fmu_packager.models import (
                 FmuRef, MappingTable,
@@ -222,6 +230,9 @@ class TestAssemblyWithoutBuild:
                 assert "modelDescription.xml" in names
                 assert "binaries/linux64/test_fmu.so" in names
                 assert "resources/internal.fmu" in names
+                # IMP-028: pre-extracted runtime payload embedded via pyssp path.
+                assert "resources/internal/binaries/linux64/internal_model.so" in names
+                assert "resources/internal/resources/data.txt" in names
 
                 md = zf.read("modelDescription.xml").decode("utf-8")
                 assert "generationDateAndTime=\"2024-01-01T00:00:00Z\"" in md, md
@@ -391,6 +402,7 @@ class TestCliPipeline:
         def fake_assemble_fmu(**kwargs):
             captured["spec"] = kwargs["spec"]
             captured["mapping"] = kwargs["mapping"]
+            captured["output_path"] = kwargs["output_path"]
             return report
 
         monkeypatch.setattr(cli_mod, "assemble_fmu", fake_assemble_fmu)
@@ -513,6 +525,125 @@ class TestCliPipeline:
         )
         assert result.exit_code == 0, result.output
 
+    def test_main_exits_one_on_spec_error(self, tmp_path):
+        """A SpecValidationError from a bad spec exits 1 with a message."""
+        from click.testing import CliRunner
+        import cs_fmu_packager.cli as cli_mod
+
+        bad = tmp_path / "bad.ssp"
+        bad.write_text("not a zip")
+        result = CliRunner().invoke(cli_mod.main, [str(bad), "--dry-run"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+
+    def test_main_exits_one_on_mapping_error(self, tmp_path, make_ssp):
+        """A MappingError (unresolvable connection variable) exits 1 with a message."""
+        from click.testing import CliRunner
+        import cs_fmu_packager.cli as cli_mod
+
+        # The fixture FMUs expose no variables, so a connection to ``y`` fails
+        # during mapping.
+        spec_path = make_ssp(
+            fmu_sources={"m00": "resources/m00.fmu"},
+            connections=[("m00", "y", "m00", "u")],
+        )
+        result = CliRunner().invoke(cli_mod.main, [spec_path, "--dry-run"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+
+    def test_default_output_path_derived_from_spec(self, tmp_path, make_ssp, monkeypatch):
+        """Without ``-o`` the output FMU is named after the spec."""
+        import cs_fmu_packager.cli as cli_mod
+
+        spec_path = self._make_ssp(make_ssp)
+        so_path = os.path.join(str(tmp_path), "fake.so")
+        with open(so_path, "wb") as f:
+            f.write(b"\x7fELF")
+
+        cli_mod = self._install_fake_build(monkeypatch, so_path)
+        captured = {}
+        self._install_recording_assemble(
+            monkeypatch, cli_mod, captured,
+            BuildReport(
+                spec_path="spec.ssp", output_path="", tool_version="0.1.0",
+                fmu_count=1, variable_count=0, connection_count=0,
+                algebraic_loop_count=0, solver_type="fixed_step",
+                solver_step_size=0.001, communication_step=0.001,
+            ),
+        )
+        expected_out = os.path.splitext(os.path.basename(spec_path))[0] + ".fmu"
+        cli_mod._execute(
+            spec_path, None, None, None, None,
+            dry_run=False, step_size=None, communication_step=None,
+            verbose=False,
+        )
+        assert captured["output_path"] == expected_out
+
+    def test_verbose_reports_pipeline_stages(self, tmp_path, make_ssp, monkeypatch, capsys):
+        """verbose=True emits the pipeline stage messages."""
+        import cs_fmu_packager.cli as cli_mod
+
+        spec_path = self._make_ssp(make_ssp)
+        so_path = os.path.join(str(tmp_path), "fake.so")
+        with open(so_path, "wb") as f:
+            f.write(b"\x7fELF")
+
+        cli_mod = self._install_fake_build(monkeypatch, so_path)
+        self._install_recording_assemble(
+            monkeypatch, cli_mod, {},
+            BuildReport(
+                spec_path="s", output_path="o", tool_version="0.1.0",
+                fmu_count=1, variable_count=0, connection_count=0,
+                algebraic_loop_count=0, solver_type="fixed_step",
+                solver_step_size=0.001, communication_step=0.001,
+            ),
+        )
+        out_fmu = os.path.join(str(tmp_path), "out.fmu")
+        cli_mod._execute(
+            spec_path, out_fmu, None, None, None,
+            dry_run=False, step_size=None, communication_step=None,
+            verbose=True,
+        )
+        output = capsys.readouterr().out
+        assert "Parsing SSP package:" in output
+        assert "Inspecting FMUs and building mapping..." in output
+        assert "Generating C wrapper code..." in output
+        assert "Built:" in output
+        assert "Assembling FMU:" in output
+        assert "Successfully created:" in output
+
+    def test_report_parent_dir_created(self, tmp_path, make_ssp, monkeypatch):
+        """``--report`` creates missing parent directories."""
+        import cs_fmu_packager.cli as cli_mod
+
+        spec_path = self._make_ssp(make_ssp)
+        so_path = os.path.join(str(tmp_path), "fake.so")
+        with open(so_path, "wb") as f:
+            f.write(b"\x7fELF")
+
+        report = BuildReport(
+            spec_path="spec.ssp", output_path="out.fmu", tool_version="0.1.0",
+            fmu_count=1, variable_count=2, connection_count=0,
+            algebraic_loop_count=0, solver_type="fixed_step",
+            solver_step_size=0.001, communication_step=0.01,
+            warnings=["w1"], fmu_guids={"m00": "{guid}"},
+            wrapper_variables=["u"],
+        )
+        cli_mod = self._install_fake_build(monkeypatch, so_path)
+        self._install_recording_assemble(monkeypatch, cli_mod, {}, report)
+
+        out_fmu = os.path.join(str(tmp_path), "out.fmu")
+        nested_report = os.path.join(str(tmp_path), "nested", "deep", "report.json")
+        cli_mod._execute(
+            spec_path, out_fmu, nested_report, None, None,
+            dry_run=False, step_size=None, communication_step=None,
+            verbose=False,
+        )
+        assert os.path.isfile(nested_report)
+        with open(nested_report) as f:
+            data = json.load(f)
+        assert data["variable_count"] == 2
+
 
 # IMP-028: multi-FMU composite codegen + runtime (packaged SCC groups).
 # The repo's tiny fixture FMUs carry no shared library, so this test
@@ -586,6 +717,111 @@ def _generate_chain_ssp(
     return ssp_path
 
 
+def _generate_chain3_ssp(work_dir: str) -> str:
+    """Write ``chain3.ssp``: integrator -> gain -> integrator (2 stateful FMUs).
+
+    With u=1 the analytic solution is m00.y = t and m02.y = t^2, so the test
+    can verify the combined ODE state vector (nx=2) is integrated correctly.
+    """
+    from xml.etree import ElementTree as ET
+
+    from tests.helpers import build_ssp_document
+    from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+
+    integrator = os.path.join(work_dir, "integrator.fmu")
+    gain = os.path.join(work_dir, "gain.fmu")
+    ssp_path = os.path.join(work_dir, "chain3.ssp")
+
+    solver = ET.Element("Solver")
+    solver.set("type", "fixed_step")
+    solver.set("stepSize", "0.001")
+    solver.set("communicationStep", "0.01")
+    wrapper = ET.Element("Wrapper")
+    wrapper.set("communicationStep", "0.01")
+
+    document = build_ssp_document(
+        name="chain3_test",
+        fmu_sources={
+            "m00": "resources/integrator.fmu",
+            "m01": "resources/gain.fmu",
+            "m02": "resources/integrator.fmu",
+        },
+        connectors=[
+            {"element": "m00/u", "name": "u[1]", "kind": "input", "type_name": "Real"},
+            {"element": "m00/y", "name": "m00.y[1]", "kind": "output", "type_name": "Real"},
+            {"element": "m02/y", "name": "m02.y[1]", "kind": "output", "type_name": "Real"},
+        ],
+        connections=[
+            ("m00", "y", "m01", "u"),
+            ("m01", "y", "m02", "u"),
+        ],
+        annotations=[("cs-fmu-packager", [solver, wrapper])],
+    )
+    with zipfile.ZipFile(ssp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(document))
+        for member, fmu in (
+            ("resources/integrator.fmu", integrator),
+            ("resources/gain.fmu", gain),
+        ):
+            with open(fmu, "rb") as f:
+                zf.writestr(member, f.read())
+    return ssp_path
+
+
+def _generate_loop_ssp(work_dir: str) -> str:
+    """Write ``loop.ssp``: StaticGain <-> StaticOffset (algebraic loop).
+
+    Connections: gain.y -> offset.u and offset.y -> gain.u.  With gain.k=0.5
+    and offset.c=1 the analytic fixed point is gain.y = 1, offset.y = 2
+    (u_gain = 2, u_offset = 1).  The generated C resolves this with
+    fixed-point iteration, so the test proves that runtime path converges.
+    """
+    from xml.etree import ElementTree as ET
+
+    from tests.helpers import build_ssp_document
+    from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+
+    gain = os.path.join(work_dir, "static_gain.fmu")
+    offset = os.path.join(work_dir, "static_offset.fmu")
+    ssp_path = os.path.join(work_dir, "loop.ssp")
+
+    solver = ET.Element("Solver")
+    solver.set("type", "fixed_step")
+    solver.set("stepSize", "0.001")
+    solver.set("communicationStep", "0.01")
+    loop = ET.Element("AlgebraicLoop")
+    loop.set("maxIterations", "200")
+    loop.set("tolerance", "1e-8")
+    wrapper = ET.Element("Wrapper")
+    wrapper.set("communicationStep", "0.01")
+
+    document = build_ssp_document(
+        name="loop_test",
+        fmu_sources={
+            "gain": "resources/static_gain.fmu",
+            "offset": "resources/static_offset.fmu",
+        },
+        connectors=[
+            {"element": "gain/y", "name": "gain.y", "kind": "output", "type_name": "Real"},
+            {"element": "offset/y", "name": "offset.y", "kind": "output", "type_name": "Real"},
+        ],
+        connections=[
+            ("gain", "y", "offset", "u"),
+            ("offset", "y", "gain", "u"),
+        ],
+        annotations=[("cs-fmu-packager", [solver, loop, wrapper])],
+    )
+    with zipfile.ZipFile(ssp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(document))
+        for member, fmu in (
+            ("resources/static_gain.fmu", gain),
+            ("resources/static_offset.fmu", offset),
+        ):
+            with open(fmu, "rb") as f:
+                zf.writestr(member, f.read())
+    return ssp_path
+
+
 def _trajectory(result):
     """Normalise fmpy.simulate_fmu output (DataFrame or recarray) to
     ``(names, series_dict)``."""
@@ -597,20 +833,44 @@ def _trajectory(result):
     return names, {n: np.asarray(result[n]) for n in names}
 
 
+@pytest.fixture(scope="module")
+def shared_fmus():
+    """Generate the full OMC fixture set (with CS exports) once per module.
+
+    The heavy multi-FMU tests all stage the same OMC-produced FMUs; generating
+    them once per module (instead of once per test) cuts ~20s of redundant
+    compiler time per test.
+    """
+    work = os.path.join(
+        os.path.dirname(_HERE), "build", "test", "test_end_to_end", "_shared_fmus"
+    )
+    os.makedirs(work, exist_ok=True)
+    subprocess.run(
+        [sys.executable, _GENERATE_SCRIPT, work, "--cs"],
+        check=True, capture_output=True, text=True, timeout=300,
+    )
+    return work
+
+
+def _stage_fmus(shared: str, work: str, names) -> None:
+    """Copy named OMC-produced FMUs from *shared* into *work*."""
+    for name in names:
+        src = os.path.join(shared, f"{name}.fmu")
+        assert os.path.isfile(src), f"missing shared FMU {src}"
+        shutil.copy2(src, os.path.join(work, f"{name}.fmu"))
+
+
 @pytest.mark.skipif(not _VCPKG_AVAILABLE, reason="VCPKG_ROOT not set")
 @pytest.mark.skipif(not _OMC_AVAILABLE, reason="OpenModelica compiler (omc) not installed")
 @pytest.mark.skipif(not _FMPY_AVAILABLE, reason="fmpy not installed (pip install fmpy)")
 class TestMultiFmuEndToEnd:
     """IMP-028: a two-ME-node chained spec must build, package, and run."""
 
-    def test_two_node_chain_builds_and_simulates(self, artifact_dir):
+    def test_two_node_chain_builds_and_simulates(self, artifact_dir, shared_fmus):
         work = str(artifact_dir)
 
-        # 1. Generate real ME FMUs with OMC.
-        subprocess.run(
-            [sys.executable, _GENERATE_SCRIPT, work],
-            check=True, capture_output=True, text=True, timeout=300,
-        )
+        # 1. Stage real ME FMUs generated once by OMC (module-scoped).
+        _stage_fmus(shared_fmus, work, ("integrator", "gain"))
         for fname in ("integrator.fmu", "gain.fmu"):
             assert os.path.isfile(os.path.join(work, fname)), f"missing {fname}"
 
@@ -671,13 +931,10 @@ class TestMultiFmuEndToEnd:
         # Outputs are recorded and finite over the whole run.
         assert np.all(np.isfinite(y1))
 
-    def test_two_node_chain_respects_zero_input(self, artifact_dir):
+    def test_two_node_chain_respects_zero_input(self, artifact_dir, shared_fmus):
         """With u=0 the integrator state stays at zero (input propagation)."""
         work = str(artifact_dir)
-        subprocess.run(
-            [sys.executable, _GENERATE_SCRIPT, work],
-            check=True, capture_output=True, text=True, timeout=300,
-        )
+        _stage_fmus(shared_fmus, work, ("integrator", "gain"))
         ssp = _generate_chain_ssp(work)
         out_fmu = os.path.join(work, "chain.fmu")
         cmd = [
@@ -701,13 +958,10 @@ class TestMultiFmuEndToEnd:
         assert np.max(np.abs(y00)) < 1e-9, f"integrator drifted: {y00}"
         assert np.max(np.abs(y01)) < 1e-9, f"gain output drifted: {y01}"
 
-    def test_all_solver_types_run(self, artifact_dir):
+    def test_all_solver_types_run(self, artifact_dir, shared_fmus):
         """Every reserved solver.type runs the packaged ODE correctly."""
         work = str(artifact_dir)
-        subprocess.run(
-            [sys.executable, _GENERATE_SCRIPT, work],
-            check=True, capture_output=True, text=True, timeout=300,
-        )
+        _stage_fmus(shared_fmus, work, ("integrator", "gain"))
         ssp = _generate_chain_ssp(work)
         out_fmu = os.path.join(work, "chain.fmu")
         cmd = [
@@ -744,14 +998,11 @@ class TestMultiFmuEndToEnd:
             )
             assert np.all(np.isfinite(y00))
 
-    def test_packager_matches_omc_reference(self, artifact_dir):
+    def test_packager_matches_omc_reference(self, artifact_dir, shared_fmus):
         """Packager artifact and OMC reference CS FMU agree on ``y`` (u=1 step)."""
         work = str(artifact_dir)
 
-        subprocess.run(
-            [sys.executable, _GENERATE_SCRIPT, work, "--cs"],
-            check=True, capture_output=True, text=True, timeout=300,
-        )
+        _stage_fmus(shared_fmus, work, ("integrator", "gain", "IntegratorWithGain_CS"))
         for fname in ("integrator.fmu", "gain.fmu", "IntegratorWithGain_CS.fmu"):
             assert os.path.isfile(os.path.join(work, fname)), f"missing {fname}"
 
@@ -822,3 +1073,99 @@ class TestMultiFmuEndToEnd:
         assert ver["max_deviations"]["y"] < 5e-3, (
             f"max |y_ref - y_art| = {ver['max_deviations']['y']}"
         )
+
+    def test_three_node_chain_two_stateful_fmus(self, artifact_dir, shared_fmus):
+        """integrator -> gain -> integrator: the combined state vector (nx=2)
+        must be integrated correctly across two stateful internal FMUs.
+
+        Analytic solution for u=1: m00.y = t and m02.y = t^2.  A bug in the
+        per-FMU state offsetting inside ``combined_rhs`` would corrupt the
+        second integrator's state.
+        """
+        work = str(artifact_dir)
+        _stage_fmus(shared_fmus, work, ("integrator", "gain"))
+
+        ssp = _generate_chain3_ssp(work)
+        out_fmu = os.path.join(work, "chain3.fmu")
+        cmd = [
+            sys.executable, "-m", "cs_fmu_packager", ssp,
+            "-o", out_fmu, "--vcpkg-root", os.environ.get("VCPKG_ROOT"),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        assert result.returncode == 0, (
+            f"packaging failed\nstdout:{result.stdout}\nstderr:{result.stderr}"
+        )
+        assert os.path.isfile(out_fmu)
+
+        import fmpy
+        import numpy as np
+
+        stop_time = 0.2
+        dt = np.dtype([("time", np.float64), ("u[1]", np.float64)])
+        step = np.array([(0.0, 1.0), (1.0, 1.0)], dtype=dt)
+        result = fmpy.simulate_fmu(
+            out_fmu, start_time=0.0, stop_time=stop_time,
+            step_size=0.01, input=step,
+        )
+        names, series = _trajectory(result)
+        assert "m00.y[1]" in names
+        assert "m02.y[1]" in names
+
+        time = series["time"]
+        y00 = series["m00.y[1]"]
+        y02 = series["m02.y[1]"]
+        i_end = int(np.argmin(np.abs(time - stop_time)))
+
+        # First integrator: y = t.
+        assert abs(y00[i_end] - stop_time) < 5e-3, f"m00.y[1]={y00[i_end]}"
+        # Second integrator integrates 2*t -> y = t^2.  This proves the state
+        # offset between the two integrators is correct (nx=2 combined vector).
+        assert abs(y02[i_end] - stop_time**2) < 5e-3, f"m02.y[1]={y02[i_end]}"
+        assert np.all(np.isfinite(y02))
+
+    def test_algebraic_loop_resolves_at_runtime(self, artifact_dir, shared_fmus):
+        """A two-FMU algebraic loop must converge at runtime.
+
+        gain.y -> offset.u and offset.y -> gain.u.  With gain.k=0.5 and
+        offset.c=1 the analytic fixed point is gain.y = 1 and offset.y = 2.
+        This exercises the generated ``fixed_point_iteration.c`` (previously
+        only covered by string assertions).
+        """
+        work = str(artifact_dir)
+        _stage_fmus(shared_fmus, work, ("static_gain", "static_offset"))
+
+        ssp = _generate_loop_ssp(work)
+        out_fmu = os.path.join(work, "loop.fmu")
+        cmd = [
+            sys.executable, "-m", "cs_fmu_packager", ssp,
+            "-o", out_fmu, "--vcpkg-root", os.environ.get("VCPKG_ROOT"),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        assert result.returncode == 0, (
+            f"packaging failed\nstdout:{result.stdout}\nstderr:{result.stderr}"
+        )
+        assert os.path.isfile(out_fmu)
+
+        with zipfile.ZipFile(out_fmu) as zf:
+            names = zf.namelist()
+            assert "resources/gain/binaries/linux64/static_gain.so" in names
+            assert "resources/offset/binaries/linux64/static_offset.so" in names
+
+        import fmpy
+        import numpy as np
+
+        result = fmpy.simulate_fmu(
+            out_fmu, start_time=0.0, stop_time=0.1, step_size=0.01,
+        )
+        names, series = _trajectory(result)
+        assert "gain.y" in names
+        assert "offset.y" in names
+
+        gain_y = np.asarray(series["gain.y"], dtype=np.float64)
+        offset_y = np.asarray(series["offset.y"], dtype=np.float64)
+
+        # Steady-state fixed point reached from a zero initial guess.
+        assert abs(float(gain_y[-1]) - 1.0) < 1e-3, f"gain.y={gain_y[-1]}"
+        assert abs(float(offset_y[-1]) - 2.0) < 1e-3, f"offset.y={offset_y[-1]}"
+        assert np.all(np.isfinite(gain_y))
+        assert np.all(np.isfinite(offset_y))

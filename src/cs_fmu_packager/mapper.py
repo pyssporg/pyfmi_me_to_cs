@@ -83,6 +83,19 @@ def _validate_connection_direction(
             f"(expected 'input')"
         )
 
+    # The generated C routes every internal connection through getReal/setReal,
+    # so a non-Real variable on either side would be reinterpreted as a Real.
+    # Surface a warning so the spec author can see the mismatch.
+    source_type = getattr(source_var, "type_name", None) or "Real"
+    target_type = getattr(target_var, "type_name", None) or "Real"
+    if source_type != "Real" or target_type != "Real":
+        warnings.append(
+            f"Connection {conn.source_fmu}.{conn.source_variable} -> "
+            f"{conn.target_fmu}.{conn.target_variable}: "
+            f"non-Real connection '{source_type}' -> '{target_type}' "
+            f"(runtime routes connections through getReal/setReal)"
+        )
+
 
 def _detect_unsupported_features(
     doc: Fmi2ModelDescriptionDocument,
@@ -179,6 +192,20 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
 
     warnings: List[str] = []
 
+    # Auto-discovered variables from multiple FMUs can collide on the wrapper
+    # name (e.g. two FMUs both exposing an input ``u``).  Duplicate boundary
+    # variable names would produce an invalid modelDescription.xml, so warn.
+    seen_wrapper_names: Dict[str, str] = {}
+    for var in spec.variables:
+        if var.name in seen_wrapper_names:
+            warnings.append(
+                f"Variable '{var.name}': duplicate wrapper variable name "
+                f"(also defined by FMU '{seen_wrapper_names[var.name]}'); "
+                "generated modelDescription.xml will contain duplicate names"
+            )
+        else:
+            seen_wrapper_names[var.name] = var.target_fmu or var.source_fmu or ""
+
     # Resolve connections
     resolved_connections: List[ResolvedConnection] = []
     for idx, conn in enumerate(spec.connections):
@@ -248,6 +275,13 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
                 mapped.unit = sv.unit
                 mapped.description = sv.description
             wrapper_parameters.append(mapped)
+
+        else:
+            warnings.append(
+                f"Variable {idx}: unsupported causality '{var.causality}' "
+                "(expected 'input', 'output', or 'parameter'); variable "
+                f"'{var.name}' is not exposed at the wrapper boundary"
+            )
 
     # Detect algebraic loops (strongly connected components)
     conn_pairs = [(c.source_fmu, c.target_fmu) for c in resolved_connections]

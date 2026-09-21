@@ -15,15 +15,35 @@ from cs_fmu_packager.models import MappingTable, PackageSpec
 
 
 def _derive_guid(spec: PackageSpec) -> str:
-    """Derive a deterministic GUID from spec content."""
+    """Derive a deterministic GUID from spec content.
+
+    Two specs that differ in the boundary variable set or the internal
+    connections must produce different GUIDs, so the fingerprint covers
+    variable names/causalities/types/targets and connection endpoints in
+    addition to the solver/wrapper policy.
+    """
+    def _var_fingerprint(v) -> str:
+        return (
+            f"{v.name}:{v.causality}:{v.type}:"
+            f"{v.target_fmu}.{v.target_variable}:"
+            f"{v.source_fmu}.{v.source_variable}:{v.start}"
+        )
+
+    variable_fingerprint = "|".join(sorted(_var_fingerprint(v) for v in spec.variables))
+    connection_fingerprint = "|".join(
+        sorted(
+            f"{c.source_fmu}.{c.source_variable}->{c.target_fmu}.{c.target_variable}"
+            for c in spec.connections
+        )
+    )
     content = (
         str(sorted(spec.fmus.keys()))
         + str(spec.solver.type)
         + str(spec.solver.step_size)
         + str(spec.solver.tolerance)
         + str(spec.wrapper.communication_step)
-        + str(len(spec.connections))
-        + str(len(spec.variables))
+        + variable_fingerprint
+        + connection_fingerprint
     )
     h = hashlib.md5(content.encode())
     raw = h.digest()

@@ -11,6 +11,11 @@ SSP package (.ssp) ──► cs-fmu-packager ──► Co-Simulation FMU (.fmu)
 By the end, you will have assembled an `.ssp` package, inspected your FMUs,
 built the packaged CS-FMU, and verified the output.
 
+> **Want a runnable example instead of typing it out?** A complete, executable
+> integrator → gain example lives in
+> [examples/quickstart](examples/quickstart/README.md) — it generates the FMUs
+> with OMC, builds the `.ssp`, and simulates the output FMU with fmpy.
+
 ## Prerequisites
 
 Before starting, install the following:
@@ -92,8 +97,10 @@ cd my_system && zip -r ../my_system.ssp SystemStructure.ssd resources/
 > **Note:** every internal FMU input, output, and parameter is exposed at the
 > packaged boundary — through the declared `<Connectors>` or automatically by
 > default — so all internal values can be get/set/viewed by an external master.
-> Fixed-step and communication step sizes come from the optional
-> `cs-fmu-packager` vendor `<Annotations>` block, or fall back to defaults.
+> Solver and wrapper configuration (solver type, step sizes, tolerance,
+> algebraic-loop policy) comes from the optional `cs-fmu-packager` vendor
+> `<Annotations>` block, or falls back to defaults. The full schema and
+> defaults are documented in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ### Step 2: Validate your package (dry run)
 
@@ -131,8 +138,13 @@ On success you will see:
 
 ```
 Successfully created: my_system.fmu
-  2 FMU(s), 2 variable(s), 1 connection(s)
+  2 FMU(s), 5 variable(s), 1 connection(s)
 ```
+
+The variable count includes the two boundary connectors plus the three
+wrapper-local solver parameters (`solver.type`, `solver.tolerance`,
+`solver.step_size`) exposed on every packaged FMU — see
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ### Step 4: Verify the output
 
@@ -162,7 +174,11 @@ sudo apt install build-essential
 - Check that `SystemStructure.ssd` contains `<Components>` with `source` URIs that exist inside the `.ssp` archive.
 - Connector `kind` must be one of: `input`, `output`, `parameter`, `calculatedParameter`, `inout`.
 - Boundary connector `element` paths use the form `<component>/<variable>`.
-- Solver policy (step sizes, algebraic-loop iteration) comes from the `cs-fmu-packager` vendor annotation; if present, `stepSize` must be ≤ `communicationStep`.
+- Solver policy (solver type, step sizes, tolerance, algebraic-loop iteration)
+  comes from the `cs-fmu-packager` vendor annotation (see
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md)); if present, `stepSize` must
+  be ≤ `communicationStep`, and `Solver.communicationStep` must equal
+  `Wrapper.communicationStep`.
 
 ### The build fails
 Run with `--verbose` to see detailed pipeline output:
@@ -173,6 +189,10 @@ This prints each pipeline phase and any warnings from the mapping step.
 
 ## Next Steps
 
+- [examples/quickstart](examples/quickstart/README.md) — a runnable example you
+  can build and simulate end-to-end
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — full configuration reference
+  (vendor annotation schema, solver types, runtime solver parameters)
 - [README.md](README.md) — project overview, CLI reference, prerequisites
 - [CONTRIBUTING.md](CONTRIBUTING.md) — developer guide and how to contribute
 - [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, architecture motivation

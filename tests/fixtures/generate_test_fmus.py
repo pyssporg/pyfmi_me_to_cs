@@ -40,6 +40,8 @@ _ModelInfo = tuple[str, bool, list[str]]
 _MODELS: dict[str, _ModelInfo] = {
     "integrator": ("Integrator", False, []),
     "gain": ("Gain", False, []),
+    "static_gain": ("StaticGain", False, []),
+    "static_offset": ("StaticOffset", False, []),
     "IntegratorWithGain": ("IntegratorWithGain", True, ["Integrator", "Gain"]),
 }
 

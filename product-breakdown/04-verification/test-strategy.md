@@ -12,11 +12,18 @@ Three-tier testing strategy:
 
 | File | Type | Tests | Coverage |
 | --- | --- | --- | --- |
-| `test_ssp_spec.py` | Unit | 23 | SSP package parsing, normalization, validation rules, vendor config |
-| `test_fmu_inspection.py` | Unit | 6 | FMU ZIP parsing, XML extraction, validation |
-| `test_mapper.py` | Unit | 7 | Variable resolution, connection direction, SCC detection |
-| `test_codegen.py` | Unit | 3 classes | CMake generation, model description, variable preservation |
-| `test_end_to_end.py` | Integration | 4 | FMU assembly, build report, deterministic output |
+| `test_ssp_spec.py` | Unit | 38 | SSP package parsing, normalization, validation rules, vendor config, value coercion |
+| `test_fmu_inspection.py` | Unit | 12 | FMU ZIP parsing, XML extraction, validation, FMI-version rejection |
+| `test_mapper.py` | Unit | 17 | Variable resolution, connection direction, SCC detection, auto-discovery, warnings |
+| `test_codegen.py` | Unit | 28 | CMake generation, model description, C interface golden file, valueReference invariants, solver knobs |
+| `test_builder.py` | Unit | 13 | vcpkg/CMake build integration and error paths |
+| `test_packager.py` | Unit | 13 | FMU assembly error paths, inner-FMU runtime payload embedding, build report |
+| `test_end_to_end.py` | Integration | 22 | Assembly, build report, deterministic output, CLI pipeline, multi-FMU runtime |
+| `test_cs_behavior_verification.py` | Behavioral | 4 | Trajectory comparison framework against OMC reference FMUs |
+
+Total: 147 tests. The heavy multi-FMU integration tests are gated on
+`VCPKG_ROOT`, `omc`, and `fmpy` via `@pytest.mark.skipif`; the behavioral
+verification tests additionally use the `verification` marker.
 
 ## Key Design Decisions
 
@@ -24,6 +31,8 @@ Three-tier testing strategy:
 - Build tests are conditional (`@pytest.mark.skipif`) on `VCPKG_ROOT` being set to avoid CI failures on non-Linux or non-vcpkg environments.
 - SSP package tests build complete `.ssp` archives (SSD + embedded FMUs) into temporary files, then parse them through the standard API (INP-029).
 - Mapper tests create temporary FMU files via `tempfile.mkstemp` and clean up via `shutil.rmtree`.
+- The multi-FMU integration tests stage OMC-generated FMUs from a module-scoped fixture (generated once per run) and package the `.ssp` through the real CLI.
+- The runtime algebraic-loop and two-stateful-FMU integration tests exercise the generated C solver/fixed-point code behaviourally, not just via string assertions.
 
 ## Modelica-based Fixture Generation and Behavioral Verification
 
@@ -50,7 +59,7 @@ The project's core ME→CS conversion pipeline had no automated behavioral valid
 - `fmpy.simulate_fmu()` runs both CS FMUs with identical parameters.
 - Output trajectories are compared using `numpy.allclose(rtol=1e-4, atol=1e-6)`.
 - The comparison is implemented in `tests/fixtures/cs_verification.py` (the `verify_cs_behavior()` helper).
-- Three tests in `tests/test_cs_behavior_verification.py` exercise the verification loop: (1) nominal match, (2) tolerance boundary, (3) corrupted-FMU detection.
+- Four tests in `tests/test_cs_behavior_verification.py` exercise the verification loop: (1) fixture generation sanity, (2) nominal match against an identical FMU, (3) tight-tolerance boundary, (4) input-signal sensitivity (different inputs produce detectably different trajectories).
 
 ### When to regenerate fixtures
 

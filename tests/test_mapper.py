@@ -159,7 +159,7 @@ def test_single_fmu_mapping(fmus_dir: str):
     )
     mapping = build_mapping(spec)
     assert len(mapping.fmus) == 1
-    assert mapping.execution_order == ["src"] or "src" in mapping.execution_order
+    assert "src" in mapping.execution_order
     assert len(mapping.algebraic_loops) == 0
 
 
@@ -288,10 +288,11 @@ _REAL_INPUT_VAR = '<ScalarVariable name="u" valueReference="12" causality="input
 
 
 def test_non_real_connection_resolves_without_raising(fmus_dir: str):
-    """Boolean/Integer outputs connect to Real inputs without mapping-time type checks.
+    """Boolean/Integer outputs connect to Real inputs without mapping-time errors.
 
     The C codegen routes all internal connections through getReal/setReal, so
-    non-Real source variables are not rejected during mapping.
+    non-Real source variables are not rejected during mapping.  A warning must
+    be raised instead, because the runtime would reinterpret the value as Real.
     """
     src_path = os.path.join(fmus_dir, "bool_src.fmu")
     tgt_path = os.path.join(fmus_dir, "real_tgt.fmu")
@@ -319,6 +320,12 @@ def test_non_real_connection_resolves_without_raising(fmus_dir: str):
     assert by_source["b"].target_value_reference == 12
     assert by_source["i"].source_value_reference == 11
     assert by_source["i"].target_value_reference == 12
+    non_real_warnings = [
+        w for w in mapping.warnings if "non-Real connection" in w
+    ]
+    assert len(non_real_warnings) == 2, mapping.warnings
+    assert "Boolean' -> 'Real'" in non_real_warnings[0]
+    assert "Integer' -> 'Real'" in non_real_warnings[1]
 
 
 def _create_test_fmu_with_desc(path: str, model_desc: str) -> None:
@@ -445,3 +452,62 @@ def test_auto_discover_variables(fmus_dir: str):
     assert len(params) == 1
     assert params[0].name == "param1"
     assert params[0].target_fmu == "fmu1"
+
+
+def test_unknown_causality_warns(fmus_dir: str):
+    """A WrapperVariable with an unsupported causality warns and is not exposed."""
+    src_path, _ = _create_fmu_pair(fmus_dir)
+    spec = PackageSpec(
+        fmus={"src": FmuRef(name="src", path=src_path)},
+        connections=[],
+        variables=[
+            WrapperVariable(name="weird", causality="independent", target_fmu="src", target_variable="u"),
+        ],
+    )
+    mapping = build_mapping(spec)
+    assert any(
+        "unsupported causality 'independent'" in w for w in mapping.warnings
+    )
+    assert mapping.wrapper_inputs == []
+    assert mapping.wrapper_outputs == []
+    assert mapping.wrapper_parameters == []
+
+
+def test_auto_discovery_duplicate_names_warn(fmus_dir: str):
+    """Two FMUs exposing the same variable name produce a duplicate-name warning."""
+    from pyssp_standard.standard.fmi2.model.model_description import (
+        Fmi2ModelDescriptionDocument, Fmi2ScalarVariable,
+    )
+    from cs_fmu_packager.mapper import _auto_discover_variables
+
+    def _doc(name: str) -> Fmi2ModelDescriptionDocument:
+        return Fmi2ModelDescriptionDocument(
+            root=None, fmi_version="2.0", model_name=name, guid=f"{{{name}}}",
+            variables=[
+                Fmi2ScalarVariable(name="u", value_reference=0, type_name="Real", causality="input"),
+                Fmi2ScalarVariable(name="y", value_reference=1, type_name="Real", causality="output"),
+            ],
+            unit_definitions=[], type_definitions=[], model_structure=None,
+        )
+
+    discovered = _auto_discover_variables({"a": _doc("A"), "b": _doc("B")})
+    names = [v.name for v in discovered]
+    assert names.count("u") == 2 and names.count("y") == 2
+
+    src_path = os.path.join(fmus_dir, "a.fmu")
+    tgt_path = os.path.join(fmus_dir, "b.fmu")
+    _create_test_fmu(src_path, "A", "{a}", _INPUT_VAR + _OUTPUT_VAR)
+    _create_test_fmu(tgt_path, "B", "{b}", _INPUT_VAR + _OUTPUT_VAR)
+    spec = PackageSpec(
+        fmus={
+            "a": FmuRef(name="a", path=src_path),
+            "b": FmuRef(name="b", path=tgt_path),
+        },
+        connections=[],
+        variables=[],
+    )
+    mapping = build_mapping(spec)
+    dup_warnings = [w for w in mapping.warnings if "duplicate wrapper variable name" in w]
+    assert len(dup_warnings) == 2, mapping.warnings
+    assert "Variable 'u'" in dup_warnings[0]
+    assert "Variable 'y'" in dup_warnings[1]

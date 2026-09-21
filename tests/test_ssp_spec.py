@@ -138,6 +138,16 @@ class TestSspValidation:
             parse_spec(ssp_path, workspace_dir=str(tmp_path))
         assert "nonexistent" in str(exc.value)
 
+    def test_connection_missing_connector_name(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[],
+            connections=[("src", "", "tgt", "u")],
+        )
+        with pytest.raises(SpecValidationError) as exc:
+            parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert "missing connector name" in str(exc.value)
+
     def test_boundary_connection_rejected(self, make_ssp, tmp_path):
         ssp_path = make_ssp(
             fmu_sources=_valid_fmu_sources(),
@@ -435,6 +445,53 @@ class TestConfigErrorPaths:
         assert "maxIterations" in str(exc.value)
         assert "must be a positive" in str(exc.value)
 
+    def test_connector_missing_name(self, make_ssp, tmp_path):
+        from tests.helpers import build_ssp_document
+        from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+        doc = build_ssp_document(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[{"element": "src/u", "name": "", "kind": "input"}],
+        )
+        path = os.path.join(str(tmp_path), "noname.ssp")
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(doc))
+            zf.writestr("resources/src.fmu", b"data")
+            zf.writestr("resources/tgt.fmu", b"data")
+        with pytest.raises(SpecValidationError) as exc:
+            parse_spec(path, workspace_dir=str(tmp_path))
+        assert "missing required attribute 'name'" in str(exc.value)
+
+
+class TestOwnedWorkspace:
+    """parse_spec without an explicit workspace owns a temp directory."""
+
+    def test_extracts_into_owned_workspace(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources={"src": "./resources/src.fmu"},
+        )
+        spec = parse_spec(ssp_path)  # no workspace_dir
+        extracted = spec.fmus["src"].path
+        assert os.path.basename(extracted) == "src.fmu"
+        assert "cs_fmu_ssp_" in os.path.dirname(extracted)
+        assert os.path.isfile(extracted)
+
+    def test_metadata_fields_propagate(self, make_ssp, tmp_path):
+        from tests.helpers import build_ssp_document
+        from pyssp_standard.standard.ssp1.codec.ssd_codec import Ssp1SsdCodec
+        doc = build_ssp_document(fmu_sources=_valid_fmu_sources())
+        doc.metadata.description = "A test system"
+        doc.metadata.author = "tester"
+        doc.metadata.fileversion = "2.3.4"
+        path = os.path.join(str(tmp_path), "meta.ssp")
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("SystemStructure.ssd", Ssp1SsdCodec().serialize(doc))
+            zf.writestr("resources/src.fmu", b"data")
+            zf.writestr("resources/tgt.fmu", b"data")
+        spec = parse_spec(path, workspace_dir=str(tmp_path))
+        assert spec.metadata["description"] == "A test system"
+        assert spec.metadata["author"] == "tester"
+        assert spec.metadata["version"] == "2.3.4"
+
 
 class TestConnectorKinds:
     """Connector kinds map onto wrapper variable causalities."""
@@ -502,6 +559,39 @@ class TestParameterValueCoercion:
         )
         spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
         assert spec.variables[0].start is None
+
+    def test_string_parameter_start_is_str(self, make_ssp, tmp_path):
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "String"},
+            ],
+            parameters=[("src/p", "String", "hello")],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.variables[0].start == "hello"
+
+    def test_parameter_lookup_dot_and_bare_forms(self, make_ssp, tmp_path):
+        """Parameter values named ``component.variable`` or bare ``variable`` resolve."""
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "Real"},
+            ],
+            parameters=[("src.p", "Real", 6.0)],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.variables[0].start == 6.0
+
+        ssp_path_bare = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=[
+                {"element": "src/p", "name": "p1", "kind": "parameter", "type_name": "Real"},
+            ],
+            parameters=[("p", "Real", 7.0)],
+        )
+        spec_bare = parse_spec(ssp_path_bare, workspace_dir=str(tmp_path))
+        assert spec_bare.variables[0].start == 7.0
 
 
 class TestNestedSystemRejected:

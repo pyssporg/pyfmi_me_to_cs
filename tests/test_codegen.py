@@ -146,6 +146,62 @@ class TestModelDescriptionCodegen:
         guid2 = re.search(r'guid="([^"]+)"', content2).group(1)
         assert guid1 == guid2
 
+    def test_guid_sensitive_to_variable_content(self, sample_spec, sample_mapping):
+        """Two specs with the same counts but different variable content differ in GUID."""
+        import re
+        from cs_fmu_packager.model_description import _derive_guid
+
+        spec_a = PackageSpec(
+            metadata={"identifier": "guid_a"},
+            fmus=sample_spec.fmus,
+            solver=SolverConfig(type="fixed_step", step_size=0.001, communication_step=0.01),
+            wrapper=WrapperConfig(communication_step=0.01),
+        )
+        spec_b = PackageSpec(
+            metadata={"identifier": "guid_b"},
+            fmus=sample_spec.fmus,
+            solver=SolverConfig(type="fixed_step", step_size=0.001, communication_step=0.01),
+            wrapper=WrapperConfig(communication_step=0.01),
+        )
+        # Same number of variables (1 input, 1 output) but different content.
+        spec_a.variables = [
+            WrapperVariable(name="input1", causality="input", target_fmu="src", target_variable="u"),
+            WrapperVariable(name="output1", causality="output", source_fmu="tgt", source_variable="y"),
+        ]
+        spec_b.variables = [
+            WrapperVariable(name="foo", causality="input", target_fmu="src", target_variable="u"),
+            WrapperVariable(name="bar", causality="output", source_fmu="tgt", source_variable="y"),
+        ]
+        assert spec_a.metadata != spec_b.metadata
+        assert len(spec_a.variables) == len(spec_b.variables)
+        guid_a = _derive_guid(spec_a)
+        guid_b = _derive_guid(spec_b)
+        assert guid_a != guid_b
+
+    def test_guid_sensitive_to_connection_content(self, sample_spec, sample_mapping):
+        """Two specs differing only in a connection endpoint produce different GUIDs."""
+        from cs_fmu_packager.model_description import _derive_guid
+
+        def _spec(conn) -> PackageSpec:
+            s = PackageSpec(
+                metadata={"identifier": "guid_conn"},
+                fmus=sample_spec.fmus,
+                connections=[conn],
+                variables=[],
+                solver=SolverConfig(type="fixed_step", step_size=0.001, communication_step=0.01),
+                wrapper=WrapperConfig(communication_step=0.01),
+            )
+            return s
+
+        conn_a = Connection(source_fmu="src", source_variable="y", target_fmu="tgt", target_variable="u")
+        conn_b = Connection(source_fmu="src", source_variable="y", target_fmu="tgt", target_variable="u")
+        # Same endpoints but... to differ we need a different endpoint; use the
+        # same count (1 connection) but a different variable.
+        conn_c = Connection(source_fmu="src", source_variable="y", target_fmu="tgt", target_variable="u")
+        conn_d = Connection(source_fmu="tgt", source_variable="y", target_fmu="src", target_variable="u")
+        assert _derive_guid(_spec(conn_a)) == _derive_guid(_spec(conn_b))  # identical → same
+        assert _derive_guid(_spec(conn_c)) != _derive_guid(_spec(conn_d))  # different → different
+
     def test_non_real_type_xml(self, sample_spec, sample_mapping):
         """IC-006: Non-Real types produce correct XML sub-elements."""
         # Add Integer/Boolean/String variables to the mapping
@@ -280,6 +336,48 @@ class TestCHeadersResolution:
         from cs_fmu_packager.errors import BuildError
         with pytest.raises(BuildError):
             _resolve_c_headers_dir(str(tmp_path / "nonexistent"))
+
+
+class TestGenerateAll:
+    """Code-generation orchestration (wrapper.py)."""
+
+    def test_generate_all_writes_expected_files(self, sample_spec, sample_mapping, tmp_path):
+        from cs_fmu_packager.codegen.wrapper import generate_all
+        from cs_fmu_packager.cli import _resolve_c_headers_dir
+
+        out_dir = str(tmp_path / "gen")
+        headers = _resolve_c_headers_dir(None)
+        generated = generate_all(sample_spec, sample_mapping, out_dir, headers)
+        for fname in (
+            "CMakeLists.txt",
+            "modelDescription.xml",
+            "fmi2_interface.c",
+            "solver_integration.c",
+            "fixed_point_iteration.c",
+            "fmi2Functions.h",
+            "fmi2TypesPlatform.h",
+            "fmi2FunctionTypes.h",
+        ):
+            path = os.path.join(out_dir, fname)
+            assert os.path.isfile(path), f"missing {path}"
+            assert generated[path] is not None
+        # Codegen headers are copied too.
+        codegen_headers = [p for p in os.listdir(out_dir) if p.endswith(".h")]
+        assert "fmi2_interface.h" in codegen_headers
+
+    def test_missing_headers_raise_codegen_error(self, sample_spec, sample_mapping, tmp_path):
+        from cs_fmu_packager.codegen.wrapper import generate_all
+        from cs_fmu_packager.errors import CodegenError
+
+        empty_headers = tmp_path / "no_headers"
+        empty_headers.mkdir()
+        with pytest.raises(CodegenError) as exc:
+            generate_all(
+                sample_spec, sample_mapping,
+                str(tmp_path / "gen"), str(empty_headers),
+            )
+        assert "Missing required FMI 2.0 header file(s)" in str(exc.value)
+        assert "fmi2Functions.h" in str(exc.value)
 
 
 @pytest.fixture

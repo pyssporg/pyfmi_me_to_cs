@@ -30,3 +30,4 @@ This directory contains the product breakdown structure (PBS) for the cs-fmu-pac
 
 - [Decision Log](decision-log.md)
 - [Traceability Map](traceability-map.md)
+- [User-facing docs](../docs/README.md) — runnable guides and configuration reference

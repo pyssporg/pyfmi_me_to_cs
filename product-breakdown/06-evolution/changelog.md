@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.1 — Solver policy expansion + multi-FMU fixes
+
+### Added
+
+- Additional solver types beyond fixed step: `variable_step`, `fixed_rk2`,
+  `fixed_rk4`, `cvode`, `backward_euler` (selectable via the `Solver type`
+  vendor annotation attribute)
+- Solver `tolerance` configuration (vendor annotation + CLI-independent)
+- Master-visible runtime solver parameters on the packaged FMU:
+  `solver.type`, `solver.tolerance`, `solver.step_size`
+- `--c-headers` CLI option (explicit FMI 2.0 C headers directory)
+- Multi-FMU composite codegen/runtime fixes (packaged SCC groups): `fmi2_interface.h`
+  emitted, literal FMU indices, variadic `log_message`, correct dlsym prefixes,
+  internal FMU resource extraction — verified by a two-ME-node end-to-end test
+
+### Constraints
+
+- Linux x86_64 only
+- FMI 2.0 only
+- Fixed-step by default; solver type is configurable (see `docs/CONFIGURATION.md`)
+
 ## v0.1.0 — Initial Development Release
 
 ### Added
@@ -26,7 +47,7 @@
 ### Constraints
 
 - Linux x86_64 only
-- Fixed-step execution only
+- Fixed-step execution only (as of v0.1.0)
 - FMI 2.0 only
 
 ### Known Limitations

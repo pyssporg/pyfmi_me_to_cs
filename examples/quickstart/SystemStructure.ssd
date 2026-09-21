@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ssd:SystemStructureDescription
+    xmlns:ssd="http://ssp-standard.org/SSP1/SystemStructureDescription"
+    xmlns:ssc="http://ssp-standard.org/SSP1/SystemStructureCommon"
+    name="quickstart" version="1.0">
+  <ssd:System name="System">
+    <ssd:Connectors>
+      <ssd:Connector element="m00/u" name="u" kind="input" />
+      <ssd:Connector element="m01/y" name="y" kind="output" />
+    </ssd:Connectors>
+    <ssd:Elements>
+      <ssd:Component name="m00" source="resources/integrator.fmu" />
+      <ssd:Component name="m01" source="resources/gain.fmu" />
+    </ssd:Elements>
+    <ssd:Connections>
+      <ssd:Connection startElement="m00" startConnector="y"
+                      endElement="m01" endConnector="u" />
+    </ssd:Connections>
+  </ssd:System>
+  <ssd:Annotations>
+    <ssc:Annotation type="cs-fmu-packager">
+      <Solver type="fixed_step" stepSize="1e-3" tolerance="1e-6" communicationStep="1e-2" />
+      <AlgebraicLoop maxIterations="100" tolerance="1e-6" />
+      <Wrapper communicationStep="1e-2" />
+    </ssc:Annotation>
+  </ssd:Annotations>
+</ssd:SystemStructureDescription>
