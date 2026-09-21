@@ -701,6 +701,49 @@ class TestMultiFmuEndToEnd:
         assert np.max(np.abs(y00)) < 1e-9, f"integrator drifted: {y00}"
         assert np.max(np.abs(y01)) < 1e-9, f"gain output drifted: {y01}"
 
+    def test_all_solver_types_run(self, artifact_dir):
+        """Every reserved solver.type runs the packaged ODE correctly."""
+        work = str(artifact_dir)
+        subprocess.run(
+            [sys.executable, _GENERATE_SCRIPT, work],
+            check=True, capture_output=True, text=True, timeout=300,
+        )
+        ssp = _generate_chain_ssp(work)
+        out_fmu = os.path.join(work, "chain.fmu")
+        cmd = [
+            sys.executable, "-m", "cs_fmu_packager", ssp,
+            "-o", out_fmu, "--vcpkg-root", os.environ.get("VCPKG_ROOT"),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        assert result.returncode == 0, result.stderr
+
+        import fmpy
+        import numpy as np
+        from cs_fmu_packager.models import SOLVER_TYPE_ENUM
+
+        dt = np.dtype([("time", np.float64), ("u[1]", np.float64)])
+        step = np.array([(0.0, 1.0), (1.0, 1.0)], dtype=dt)
+        stop_time = 0.2
+
+        for name, solver_type in SOLVER_TYPE_ENUM.items():
+            result = fmpy.simulate_fmu(
+                out_fmu, start_time=0.0, stop_time=stop_time,
+                step_size=0.01, input=step,
+                start_values={"solver.type": solver_type},
+            )
+            names, series = _trajectory(result)
+            time = series["time"]
+            y00 = series["m00.y[1]"]
+            y01 = series["m01.y[1]"]
+            i_end = int(np.argmin(np.abs(time - stop_time)))
+            assert abs(y00[i_end] - stop_time) < 8e-3, (
+                f"solver '{name}': integrator y={y00[i_end]} != t"
+            )
+            assert abs(y01[i_end] - 2.0 * y00[i_end]) < 8e-3, (
+                f"solver '{name}': gain not 2x integrator"
+            )
+            assert np.all(np.isfinite(y00))
+
     def test_packager_matches_omc_reference(self, artifact_dir):
         """Packager artifact and OMC reference CS FMU agree on ``y`` (u=1 step)."""
         work = str(artifact_dir)

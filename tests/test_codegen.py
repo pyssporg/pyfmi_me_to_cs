@@ -101,7 +101,7 @@ class TestCmakeCodegen:
     def test_generate_cmake(self, sample_spec, sample_mapping):
         content = generate_cmake(sample_mapping, sample_spec)
         assert "cmake_minimum_required(VERSION 3.22)" in content
-        assert "find_package(SUNDIALS REQUIRED COMPONENTS arkode nvecserial)" in content
+        assert "find_package(SUNDIALS REQUIRED COMPONENTS arkode cvode sunlinsoldense sunmatrixdense nvecserial)" in content
         assert "fmi2_interface.c" in content
         assert "solver_integration.c" in content
         assert "fixed_point_iteration.c" in content
@@ -378,9 +378,24 @@ class TestSolverCodegen:
     def test_solver_step_mode_branch(self, sample_spec, sample_mapping):
         """Fixed-step default uses ARKodeSetFixedStep; variable-step uses tolerances."""
         content = generate_solver_impl(sample_spec, sample_mapping)
-        assert "wrapper->solver_type == 1" in content
+        assert "SOLVER_TYPE_VARIABLE_STEP" in content
         assert "ARKodeSStolerances" in content
         assert "ARKodeSetFixedStep" in content
+
+    def test_solver_dispatch(self, sample_spec, sample_mapping):
+        """All configured solver types are wired into solver_init."""
+        content = generate_solver_impl(sample_spec, sample_mapping)
+        assert "SOLVER_TYPE_FIXED_STEP" in content
+        assert "SOLVER_TYPE_FIXED_RK2" in content
+        assert "SOLVER_TYPE_FIXED_RK4" in content
+        assert "SOLVER_TYPE_BACKWARD_EULER" in content
+        assert "SOLVER_TYPE_CVODE" in content
+        assert "ARKStepCreate(NULL, combined_rhs" in content  # implicit Euler
+        assert "CVodeCreate(CV_ADAMS" in content
+        assert "CVode(" in content  # CVODE evolve call in solver_step
+        assert "CVodeFree" in content
+        assert "CVodeSStolerances" in content
+        assert "ARKodeSetOrder" in content
 
     def test_solver_step_reports_actual_time(self, sample_spec, sample_mapping):
         """solver_step exposes the time actually reached through t_out."""

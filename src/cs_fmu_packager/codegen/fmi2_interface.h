@@ -90,6 +90,16 @@ typedef struct {
 } VariableMapping;
 
 /* ---------------------------------------------------------------------------
+ * Solver type constants (must match models.SOLVER_TYPE_ENUM).
+ * --------------------------------------------------------------------------- */
+#define SOLVER_TYPE_FIXED_STEP     0
+#define SOLVER_TYPE_VARIABLE_STEP  1
+#define SOLVER_TYPE_FIXED_RK2      2
+#define SOLVER_TYPE_FIXED_RK4      3
+#define SOLVER_TYPE_CVODE          4
+#define SOLVER_TYPE_BACKWARD_EULER 5
+
+/* ---------------------------------------------------------------------------
  * Struct: WrapperInstance (per-instance state)
  * --------------------------------------------------------------------------- */
 typedef struct {
@@ -99,7 +109,7 @@ typedef struct {
     fmi2Real current_time;
     fmi2Real communication_step;
     fmi2Real step_size;
-    int solver_type;  /* 0 = fixed_step, 1 = variable_step */
+    int solver_type;  /* one of the SOLVER_TYPE_* constants above */
     double solver_tolerance;
     int algebraic_loop_max_iterations;
     double algebraic_loop_tolerance;
@@ -148,6 +158,9 @@ typedef struct {
 
     /* Solver state */
     void* arkode_mem;
+    void* cvode_mem;
+    void* arkode_ls;  /* dense linear solver for implicit ARKODE methods */
+    void* arkode_A;   /* dense matrix backing arkode_ls */
     void* nv_state;
     double* derivatives;
     void* sunctx;

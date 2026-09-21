@@ -35,7 +35,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Find SUNDIALS dependencies
-find_package(SUNDIALS REQUIRED COMPONENTS arkode nvecserial)
+find_package(SUNDIALS REQUIRED COMPONENTS arkode cvode sunlinsoldense sunmatrixdense nvecserial)
 
 # Include FMI 2.0 standard headers
 set(FMI_HEADERS_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}")
@@ -56,6 +56,9 @@ target_include_directories({fmu_name} PRIVATE
 
 target_link_libraries({fmu_name} PRIVATE
     SUNDIALS::arkode
+    SUNDIALS::cvode
+    SUNDIALS::sunlinsoldense
+    SUNDIALS::sunmatrixdense
     SUNDIALS::nvecserial
 )
 

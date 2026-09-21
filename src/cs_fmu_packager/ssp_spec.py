@@ -35,6 +35,7 @@ from cs_fmu_packager.models import (
     Connection,
     FmuRef,
     PackageSpec,
+    SOLVER_TYPE_ENUM,
     SolverConfig,
     WrapperConfig,
     WrapperVariable,
@@ -140,9 +141,9 @@ def _parse_vendor_config(annotations) -> Tuple[SolverConfig, WrapperConfig]:
             attrs = element.attrib
             if name == "Solver":
                 solver_type = attrs.get("type", solver.type)
-                if solver_type not in ("fixed_step", "variable_step"):
+                if solver_type not in SOLVER_TYPE_ENUM:
                     raise SpecValidationError(
-                        f"solver type must be 'fixed_step' or 'variable_step' "
+                        f"solver type must be one of {sorted(SOLVER_TYPE_ENUM)} "
                         f"(v1 constraint), got '{solver_type}'"
                     )
                 solver.type = solver_type

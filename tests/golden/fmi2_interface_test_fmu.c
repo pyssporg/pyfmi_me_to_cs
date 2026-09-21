@@ -893,8 +893,9 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
 
     while (t < t_end) {
         double h;
-        if (inst->solver_type == 1) {
-            /* Variable-step mode: evolve toward the communication point */
+        if (inst->solver_type == SOLVER_TYPE_VARIABLE_STEP ||
+            inst->solver_type == SOLVER_TYPE_CVODE) {
+            /* Adaptive step control: evolve toward the communication point */
             h = t_end - t;
         } else {
             /* Fixed-step mode: slice the communication step by step_size */

@@ -113,10 +113,26 @@ SOLVER_TOLERANCE_PARAM = "solver.tolerance"
 SOLVER_STEP_SIZE_PARAM = "solver.step_size"
 
 # Solver type names -> integer enum stored in WrapperInstance.solver_type.
+# The integer values are part of the packaged FMU contract (they are the
+# start value of the master-visible solver.type parameter), so they must not
+# be renumbered.
 SOLVER_TYPE_ENUM = {
     "fixed_step": 0,
     "variable_step": 1,
+    "fixed_rk2": 2,
+    "fixed_rk4": 3,
+    "cvode": 4,
+    "backward_euler": 5,
 }
+
+# Solver types that use adaptive step control (the generated do-step loop
+# evolves straight to the communication point); all others slice the
+# communication step by solver.step_size.
+ADAPTIVE_SOLVER_TYPES = frozenset({"variable_step", "cvode"})
+
+_SOLVER_TYPE_HELP = ", ".join(
+    f"{idx}={name}" for name, idx in SOLVER_TYPE_ENUM.items()
+)
 
 
 def build_reserved_parameters(spec: PackageSpec) -> List["MappedVariable"]:
@@ -127,7 +143,7 @@ def build_reserved_parameters(spec: PackageSpec) -> List["MappedVariable"]:
             variable_type="Integer",
             causality="parameter",
             start=SOLVER_TYPE_ENUM.get(spec.solver.type, 0),
-            description="Solver type: 0=fixed_step, 1=variable_step",
+            description=f"Solver type: {_SOLVER_TYPE_HELP}",
         ),
         MappedVariable(
             wrapper_name=SOLVER_TOLERANCE_PARAM,
