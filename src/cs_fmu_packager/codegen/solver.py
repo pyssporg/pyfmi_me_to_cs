@@ -143,8 +143,16 @@ int solver_init(WrapperInstance* wrapper)
         return -1;
     }}
 
-    /* Set fixed step size */
-    ARKodeSetFixedStep(wrapper->arkode_mem, (sunrealtype)wrapper->step_size);
+    /* Set step control mode.  Fixed-step uses ARKodeSetFixedStep; the
+     * variable-step mode enables error-based step size selection driven by
+     * the master-visible solver.tolerance parameter (default fixed_step). */
+    if (wrapper->solver_type == 1) {{
+        ARKodeSStolerances(wrapper->arkode_mem,
+                           (sunrealtype)wrapper->solver_tolerance,
+                           (sunrealtype)wrapper->solver_tolerance);
+    }} else {{
+        ARKodeSetFixedStep(wrapper->arkode_mem, (sunrealtype)wrapper->step_size);
+    }}
 
     /* Attach user data */
     ARKodeSetUserData(wrapper->arkode_mem, wrapper);
@@ -160,11 +168,13 @@ int solver_init(WrapperInstance* wrapper)
 
 /* ---------------------------------------------------------------------------
  * Perform one integration step over [t0, t0 + h].
- * Uses ARKODE fixed-step mode.
+ * Uses ARKODE fixed-step or variable-step mode and reports the time actually
+ * reached through t_out (variable-step mode may stop short of t0 + h).
  * --------------------------------------------------------------------------- */
-int solver_step(WrapperInstance* wrapper, double t0, double h)
+int solver_step(WrapperInstance* wrapper, double t0, double h, double* t_out)
 {{
     if (wrapper->arkode_mem == NULL) {{
+        *t_out = t0 + h;
         return 0;
     }}
 
@@ -187,7 +197,8 @@ int solver_step(WrapperInstance* wrapper, double t0, double h)
         offset += fmu->nx;
     }}
 
-    wrapper->current_time = t0 + h;
+    *t_out = (double)t_ret;
+    wrapper->current_time = (double)t_ret;
     return 0;
 }}
 

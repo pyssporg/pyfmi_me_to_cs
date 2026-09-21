@@ -25,6 +25,7 @@ from cs_fmu_packager.models import (
     PackageSpec,
     ResolvedConnection,
     WrapperVariable,
+    build_reserved_parameters,
 )
 
 
@@ -274,11 +275,18 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
         if fid not in all_ordered:
             execution_order.append(fid)
 
+    # Reserved wrapper parameters (master-visible solver knobs).  These are
+    # wrapper-local: they carry no target FMU, so the C init emits fmu = NULL
+    # and the generated setters route them into WrapperInstance solver fields.
+    reserved_parameters = build_reserved_parameters(spec)
+
     # Assign deterministic wrapper boundary value references (1..N) in the
-    # same order used by model_description.py (inputs, outputs, parameters).
-    # The wrapper C code matches these when the master calls fmi2Set*/fmi2Get*.
+    # same order used by model_description.py (inputs, outputs, parameters,
+    # reserved parameters).  The wrapper C code matches these when the master
+    # calls fmi2Set*/fmi2Get*.
     for idx, mapped in enumerate(
-        wrapper_inputs + wrapper_outputs + wrapper_parameters, 1
+        wrapper_inputs + wrapper_outputs + wrapper_parameters + reserved_parameters,
+        1,
     ):
         mapped.wrapper_value_reference = idx
 
@@ -292,6 +300,7 @@ def build_mapping(spec: PackageSpec) -> MappingTable:
         wrapper_inputs=wrapper_inputs,
         wrapper_outputs=wrapper_outputs,
         wrapper_parameters=wrapper_parameters,
+        reserved_parameters=reserved_parameters,
         connections=resolved_connections,
         algebraic_loops=algebraic_loops,
         execution_order=execution_order,

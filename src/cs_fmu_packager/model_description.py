@@ -18,7 +18,9 @@ def _derive_guid(spec: PackageSpec) -> str:
     """Derive a deterministic GUID from spec content."""
     content = (
         str(sorted(spec.fmus.keys()))
+        + str(spec.solver.type)
         + str(spec.solver.step_size)
+        + str(spec.solver.tolerance)
         + str(spec.wrapper.communication_step)
         + str(len(spec.connections))
         + str(len(spec.variables))
@@ -43,7 +45,7 @@ def _now_iso() -> str:
 
 def _variability_for_causality(causality: str) -> str:
     return {
-        "parameter": "parameter",
+        "parameter": "fixed",
         "input": "continuous",
         "output": "continuous",
     }.get(causality, "continuous")
@@ -148,8 +150,9 @@ def generate_model_description(spec: PackageSpec, mapping: MappingTable) -> str:
     vendor_annotations = f"""  <VendorAnnotations>
     <Tool name="cs-fmu-packager">
       <CsFmuPackager
-        solverType="fixed_step"
+        solverType="{spec.solver.type}"
         solverStepSize="{spec.solver.step_size}"
+        solverTolerance="{spec.solver.tolerance}"
         communicationStepSize="{spec.wrapper.communication_step}"
         internalFMUs="{escape(internal_fmus)}"
         algebraicLoopCount="{num_loops}"

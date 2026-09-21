@@ -12,8 +12,8 @@ extern "C" {
 /* Initialize the SUNDIALS solver */
 int solver_init(WrapperInstance* wrapper);
 
-/* Perform one integration step */
-int solver_step(WrapperInstance* wrapper, double t0, double h);
+/* Perform one integration step; reports the time actually reached */
+int solver_step(WrapperInstance* wrapper, double t0, double h, double* t_out);
 
 /* Free solver resources */
 void solver_free(WrapperInstance* wrapper);

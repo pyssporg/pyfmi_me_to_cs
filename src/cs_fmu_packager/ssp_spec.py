@@ -140,13 +140,14 @@ def _parse_vendor_config(annotations) -> Tuple[SolverConfig, WrapperConfig]:
             attrs = element.attrib
             if name == "Solver":
                 solver_type = attrs.get("type", solver.type)
-                if solver_type != "fixed_step":
+                if solver_type not in ("fixed_step", "variable_step"):
                     raise SpecValidationError(
-                        f"solver type must be 'fixed_step' (v1 constraint), "
-                        f"got '{solver_type}'"
+                        f"solver type must be 'fixed_step' or 'variable_step' "
+                        f"(v1 constraint), got '{solver_type}'"
                     )
                 solver.type = solver_type
                 solver.step_size = _opt_float(attrs, "stepSize", solver.step_size)
+                solver.tolerance = _opt_float(attrs, "tolerance", solver.tolerance)
                 solver.communication_step = _opt_float(
                     attrs, "communicationStep", solver.communication_step
                 )

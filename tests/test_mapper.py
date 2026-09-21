@@ -403,9 +403,12 @@ def test_wrapper_value_reference_assignment_order(fmus_dir: str):
     )
     mapping = build_mapping(spec)
     vars_all = mapping.all_variables()
-    assert len(vars_all) == 5
-    assert [v.wrapper_value_reference for v in vars_all] == [1, 2, 3, 4, 5]
-    assert [v.wrapper_name for v in vars_all] == ["in1", "in2", "out1", "out2", "param1"]
+    assert len(vars_all) == 8
+    assert [v.wrapper_value_reference for v in vars_all] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert [v.wrapper_name for v in vars_all] == [
+        "in1", "in2", "out1", "out2", "param1",
+        "solver.type", "solver.tolerance", "solver.step_size",
+    ]
 
 
 def test_auto_discover_variables(fmus_dir: str):

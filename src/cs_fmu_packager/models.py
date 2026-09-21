@@ -69,6 +69,7 @@ class SolverConfig:
     type: str = "fixed_step"
     step_size: float = 1e-3
     communication_step: float = 1e-3
+    tolerance: float = 1e-6
     algebraic_loop: AlgebraicLoopConfig = field(default_factory=AlgebraicLoopConfig)
 
 
@@ -98,6 +99,52 @@ class PackageSpec:
 # Use Fmi2ModelDescriptionDocument and Fmi2ScalarVariable from
 # pyssp_standard.standard.fmi2.model.model_description instead.
 # See fmu_reader.inspect_fmu() which now returns Fmi2ModelDescriptionDocument.
+
+# ---------------------------------------------------------------------------
+# Reserved wrapper parameters (master-visible solver knobs)
+# ---------------------------------------------------------------------------
+# These parameters are exposed at the packaged FMU boundary with causality
+# "parameter" and are consumed by the wrapper itself (not forwarded to any
+# internal FMU). A master sets them via fmi2SetReal/fmi2SetInteger before
+# fmi2EnterInitializationMode to select the local solver policy at runtime.
+
+SOLVER_TYPE_PARAM = "solver.type"
+SOLVER_TOLERANCE_PARAM = "solver.tolerance"
+SOLVER_STEP_SIZE_PARAM = "solver.step_size"
+
+# Solver type names -> integer enum stored in WrapperInstance.solver_type.
+SOLVER_TYPE_ENUM = {
+    "fixed_step": 0,
+    "variable_step": 1,
+}
+
+
+def build_reserved_parameters(spec: PackageSpec) -> List["MappedVariable"]:
+    """Build the reserved (wrapper-local) solver control parameters."""
+    return [
+        MappedVariable(
+            wrapper_name=SOLVER_TYPE_PARAM,
+            variable_type="Integer",
+            causality="parameter",
+            start=SOLVER_TYPE_ENUM.get(spec.solver.type, 0),
+            description="Solver type: 0=fixed_step, 1=variable_step",
+        ),
+        MappedVariable(
+            wrapper_name=SOLVER_TOLERANCE_PARAM,
+            variable_type="Real",
+            causality="parameter",
+            start=spec.solver.tolerance,
+            description="Integration tolerance (relative and absolute)",
+        ),
+        MappedVariable(
+            wrapper_name=SOLVER_STEP_SIZE_PARAM,
+            variable_type="Real",
+            causality="parameter",
+            start=spec.solver.step_size,
+            description="Fixed-step integration step size",
+        ),
+    ]
+
 
 # ---------------------------------------------------------------------------
 # Mapping Table
@@ -161,13 +208,19 @@ class MappingTable:
     wrapper_inputs: List[MappedVariable] = field(default_factory=list)
     wrapper_outputs: List[MappedVariable] = field(default_factory=list)
     wrapper_parameters: List[MappedVariable] = field(default_factory=list)
+    reserved_parameters: List[MappedVariable] = field(default_factory=list)
     connections: List[ResolvedConnection] = field(default_factory=list)
     algebraic_loops: List[AlgebraicLoop] = field(default_factory=list)
     execution_order: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
     def all_variables(self) -> List[MappedVariable]:
-        return self.wrapper_inputs + self.wrapper_outputs + self.wrapper_parameters
+        return (
+            self.wrapper_inputs
+            + self.wrapper_outputs
+            + self.wrapper_parameters
+            + self.reserved_parameters
+        )
 
 
 # ---------------------------------------------------------------------------

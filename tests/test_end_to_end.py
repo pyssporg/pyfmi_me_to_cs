@@ -317,7 +317,10 @@ class TestAssemblyWithoutBuild:
         mapping = build_mapping(spec)
         variables = mapping.all_variables()
         by_name = {v.wrapper_name: v for v in variables}
-        assert set(by_name) == {"u", "y", "p"}, f"discovered: {sorted(by_name)}"
+        assert set(by_name) == {
+            "u", "y", "p",
+            "solver.type", "solver.tolerance", "solver.step_size",
+        }, f"discovered: {sorted(by_name)}"
         assert by_name["u"].causality == "input"
         assert by_name["y"].causality == "output"
         assert by_name["p"].causality == "parameter"

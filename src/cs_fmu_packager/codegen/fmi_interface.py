@@ -1,7 +1,15 @@
 """Generate fmi2_interface.c - the main FMI 2.0 CS implementation."""
 from __future__ import annotations
 
-from cs_fmu_packager.models import MappedVariable, MappingTable, PackageSpec
+from cs_fmu_packager.models import (
+    MappedVariable,
+    MappingTable,
+    PackageSpec,
+    SOLVER_STEP_SIZE_PARAM,
+    SOLVER_TOLERANCE_PARAM,
+    SOLVER_TYPE_ENUM,
+    SOLVER_TYPE_PARAM,
+)
 from cs_fmu_packager.model_description import _derive_guid
 
 
@@ -100,7 +108,8 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
     num_fmus = len(spec.fmus)
     num_inputs = len(mapping.wrapper_inputs)
     num_outputs = len(mapping.wrapper_outputs)
-    num_params = len(mapping.wrapper_parameters)
+    all_params = mapping.wrapper_parameters + mapping.reserved_parameters
+    num_params = len(all_params)
     num_connections = len(mapping.connections)
 
     # Type×role combinations for consolidation (IMP-020, IMP-021)
@@ -113,10 +122,10 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
         ("int",  "Integer","output",   "output", mapping.wrapper_outputs),
         ("bool", "Boolean","output",   "output", mapping.wrapper_outputs),
         ("str",  "String", "output",   "output", mapping.wrapper_outputs),
-        ("real", "Real",   "parameter","param",  mapping.wrapper_parameters),
-        ("int",  "Integer","parameter","param",  mapping.wrapper_parameters),
-        ("bool", "Boolean","parameter","param",  mapping.wrapper_parameters),
-        ("str",  "String", "parameter","param",  mapping.wrapper_parameters),
+        ("real", "Real",   "parameter","param",  all_params),
+        ("int",  "Integer","parameter","param",  all_params),
+        ("bool", "Boolean","parameter","param",  all_params),
+        ("str",  "String", "parameter","param",  all_params),
     ]
 
     _counts = {}
@@ -428,6 +437,87 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
         )
     do_step_output_code = "\n".join(do_step_output_lines)
 
+    # Reserved wrapper parameters (master-visible solver knobs).  These are
+    # wrapper-local, so the generated setters/getters route them into the
+    # WrapperInstance solver fields instead of forwarding to an internal FMU.
+    reserved_by_name = {v.wrapper_name: v for v in mapping.reserved_parameters}
+    solver_type_vr = reserved_by_name.get(SOLVER_TYPE_PARAM)
+    solver_tolerance_vr = reserved_by_name.get(SOLVER_TOLERANCE_PARAM)
+    solver_step_size_vr = reserved_by_name.get(SOLVER_STEP_SIZE_PARAM)
+
+    reserved_real_set_lines: list[str] = []
+    reserved_int_set_lines: list[str] = []
+    reserved_real_get_lines: list[str] = []
+    reserved_int_get_lines: list[str] = []
+    solver_default_lines: list[str] = []
+
+    if mapping.reserved_parameters:
+        solver_default_lines.append(
+            f"    inst->solver_type = {SOLVER_TYPE_ENUM.get(spec.solver.type, 0)};"
+        )
+        solver_default_lines.append(
+            f"    inst->solver_tolerance = {spec.solver.tolerance};"
+        )
+
+        if solver_tolerance_vr is not None:
+            vr = solver_tolerance_vr.wrapper_value_reference
+            reserved_real_set_lines.append(
+                f"        if (vr[i] == {vr}) {{\n"
+                f"            inst->solver_tolerance = value[i];\n"
+                f"            continue;\n"
+                f"        }}"
+            )
+            reserved_real_get_lines.append(
+                f"        if (vr[i] == {vr}) {{\n"
+                f"            value[i] = inst->solver_tolerance;\n"
+                f"            continue;\n"
+                f"        }}"
+            )
+        if solver_step_size_vr is not None:
+            vr = solver_step_size_vr.wrapper_value_reference
+            reserved_real_set_lines.append(
+                f"        if (vr[i] == {vr}) {{\n"
+                f"            inst->step_size = value[i];\n"
+                f"            continue;\n"
+                f"        }}"
+            )
+            reserved_real_get_lines.append(
+                f"        if (vr[i] == {vr}) {{\n"
+                f"            value[i] = inst->step_size;\n"
+                f"            continue;\n"
+                f"        }}"
+            )
+        if solver_type_vr is not None:
+            vr = solver_type_vr.wrapper_value_reference
+            reserved_int_set_lines.append(
+                f"        if (vr[i] == {vr}) {{\n"
+                f"            inst->solver_type = value[i];\n"
+                f"            continue;\n"
+                f"        }}"
+            )
+            reserved_int_get_lines.append(
+                f"        if (vr[i] == {vr}) {{\n"
+                f"            value[i] = inst->solver_type;\n"
+                f"            continue;\n"
+                f"        }}"
+            )
+
+    def _reserved_block(lines: list[str]) -> str:
+        """Join generated reserved-parameter lines with a leading comment."""
+        if not lines:
+            return ""
+        return (
+            "        /* Reserved wrapper parameters (solver knobs) */\n"
+            + "\n".join(lines)
+            + "\n"
+        )
+
+    reserved_real_set_code = _reserved_block(reserved_real_set_lines)
+    reserved_int_set_code = _reserved_block(reserved_int_set_lines)
+    reserved_real_get_code = _reserved_block(reserved_real_get_lines)
+    reserved_int_get_code = _reserved_block(reserved_int_get_lines)
+    solver_default_code = "\n".join(solver_default_lines)
+
     return f"""/**
  * fmi2_interface.c - FMI 2.0 Co-Simulation wrapper implementation.
  *
@@ -514,6 +604,7 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
     inst->current_time = 0.0;
     inst->step_size = {spec.solver.step_size};
     inst->communication_step = {spec.wrapper.communication_step};
+{solver_default_code}
     inst->algebraic_loop_max_iterations = {spec.solver.algebraic_loop.max_iterations};
     inst->algebraic_loop_tolerance = {spec.solver.algebraic_loop.tolerance};
     inst->num_algebraic_loops = {len(mapping.algebraic_loops)};
@@ -710,6 +801,7 @@ FMI2_Export fmi2Status fmi2GetReal(fmi2Component c, const fmi2ValueReference vr[
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {{
+{reserved_real_get_code}
         value[i] = 0.0;
 
         /* Check wrapper outputs */
@@ -730,6 +822,7 @@ FMI2_Export fmi2Status fmi2SetReal(fmi2Component c, const fmi2ValueReference vr[
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {{
+{reserved_real_set_code}
         /* Check wrapper inputs */
         int found = 0;
         for (int j = 0; j < inst->num_real_inputs; j++) {{
@@ -773,6 +866,7 @@ FMI2_Export fmi2Status fmi2GetInteger(fmi2Component c, const fmi2ValueReference 
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {{
+{reserved_int_get_code}
         value[i] = 0;
 
         /* Check wrapper outputs */
@@ -833,6 +927,7 @@ FMI2_Export fmi2Status fmi2SetInteger(fmi2Component c, const fmi2ValueReference 
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {{
+{reserved_int_set_code}
         int found = 0;
         for (int j = 0; j < inst->num_int_inputs; j++) {{
             if (inst->int_inputs[j].vr == vr[i]) {{
@@ -1023,7 +1118,14 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
     double t = currentCommunicationPoint;
 
     while (t < t_end) {{
-        double h = (t + inst->step_size <= t_end) ? inst->step_size : (t_end - t);
+        double h;
+        if (inst->solver_type == 1) {{
+            /* Variable-step mode: evolve toward the communication point */
+            h = t_end - t;
+        }} else {{
+            /* Fixed-step mode: slice the communication step by step_size */
+            h = (t + inst->step_size <= t_end) ? inst->step_size : (t_end - t);
+        }}
         if (h < 1e-15) break;
 
         /* Update input variables on internal FMUs from wrapper inputs */
@@ -1043,14 +1145,19 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         }}
 
         /* Perform integration sub-step */
-        int result = solver_step(inst, t, h);
+        double t_out = t;
+        int result = solver_step(inst, t, h, &t_out);
         if (result != 0) {{
             log_message(inst, fmi2Error, "solver", "Solver step failed at t=%g", t);
             inst->state = WrapperState_Error;
             return fmi2Error;
         }}
-
-        t += h;
+        if (t_out <= t) {{
+            log_message(inst, fmi2Error, "solver", "Solver did not advance at t=%g", t);
+            inst->state = WrapperState_Error;
+            return fmi2Error;
+        }}
+        t = t_out;
     }}
 
     /* Step 3: Update wrapper outputs from internal FMUs */

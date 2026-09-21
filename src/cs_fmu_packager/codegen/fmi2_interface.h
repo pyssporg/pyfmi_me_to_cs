@@ -99,6 +99,8 @@ typedef struct {
     fmi2Real current_time;
     fmi2Real communication_step;
     fmi2Real step_size;
+    int solver_type;  /* 0 = fixed_step, 1 = variable_step */
+    double solver_tolerance;
     int algebraic_loop_max_iterations;
     double algebraic_loop_tolerance;
     int num_algebraic_loops;

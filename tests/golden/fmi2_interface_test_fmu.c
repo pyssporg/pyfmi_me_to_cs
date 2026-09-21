@@ -70,7 +70,7 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
         return NULL;
     }
 
-    if (strcmp(fmuGUID, "b9a57e5a-a88d-075d-5fb3-2cb3d367c82a") != 0) {
+    if (strcmp(fmuGUID, "fa1130c8-a436-76bd-5c7c-72613e2ff651") != 0) {
         return NULL;
     }
 
@@ -84,6 +84,7 @@ FMI2_Export fmi2Component fmi2Instantiate(fmi2String instanceName, fmi2Type fmuT
     inst->current_time = 0.0;
     inst->step_size = 0.001;
     inst->communication_step = 0.01;
+
     inst->algebraic_loop_max_iterations = 100;
     inst->algebraic_loop_tolerance = 1e-06;
     inst->num_algebraic_loops = 0;
@@ -574,6 +575,7 @@ FMI2_Export fmi2Status fmi2GetReal(fmi2Component c, const fmi2ValueReference vr[
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {
+
         value[i] = 0.0;
 
         /* Check wrapper outputs */
@@ -594,6 +596,7 @@ FMI2_Export fmi2Status fmi2SetReal(fmi2Component c, const fmi2ValueReference vr[
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {
+
         /* Check wrapper inputs */
         int found = 0;
         for (int j = 0; j < inst->num_real_inputs; j++) {
@@ -637,6 +640,7 @@ FMI2_Export fmi2Status fmi2GetInteger(fmi2Component c, const fmi2ValueReference 
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {
+
         value[i] = 0;
 
         /* Check wrapper outputs */
@@ -697,6 +701,7 @@ FMI2_Export fmi2Status fmi2SetInteger(fmi2Component c, const fmi2ValueReference 
     WrapperInstance* inst = (WrapperInstance*)c;
 
     for (size_t i = 0; i < nvr; i++) {
+
         int found = 0;
         for (int j = 0; j < inst->num_int_inputs; j++) {
             if (inst->int_inputs[j].vr == vr[i]) {
@@ -887,7 +892,14 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
     double t = currentCommunicationPoint;
 
     while (t < t_end) {
-        double h = (t + inst->step_size <= t_end) ? inst->step_size : (t_end - t);
+        double h;
+        if (inst->solver_type == 1) {
+            /* Variable-step mode: evolve toward the communication point */
+            h = t_end - t;
+        } else {
+            /* Fixed-step mode: slice the communication step by step_size */
+            h = (t + inst->step_size <= t_end) ? inst->step_size : (t_end - t);
+        }
         if (h < 1e-15) break;
 
         /* Update input variables on internal FMUs from wrapper inputs */
@@ -942,14 +954,19 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         }
 
         /* Perform integration sub-step */
-        int result = solver_step(inst, t, h);
+        double t_out = t;
+        int result = solver_step(inst, t, h, &t_out);
         if (result != 0) {
             log_message(inst, fmi2Error, "solver", "Solver step failed at t=%g", t);
             inst->state = WrapperState_Error;
             return fmi2Error;
         }
-
-        t += h;
+        if (t_out <= t) {
+            log_message(inst, fmi2Error, "solver", "Solver did not advance at t=%g", t);
+            inst->state = WrapperState_Error;
+            return fmi2Error;
+        }
+        t = t_out;
     }
 
     /* Step 3: Update wrapper outputs from internal FMUs */

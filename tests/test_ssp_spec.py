@@ -238,6 +238,7 @@ class TestVendorConfig:
         solver = ET.Element("Solver")
         solver.set("type", "fixed_step")
         solver.set("stepSize", "0.0005")
+        solver.set("tolerance", "1e-9")
         solver.set("communicationStep", "0.01")
         loop = ET.Element("AlgebraicLoop")
         loop.set("maxIterations", "50")
@@ -252,10 +253,22 @@ class TestVendorConfig:
         spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
         assert spec.solver.type == "fixed_step"
         assert spec.solver.step_size == 0.0005
+        assert spec.solver.tolerance == 1e-9
         assert spec.solver.communication_step == 0.01
         assert spec.solver.algebraic_loop.max_iterations == 50
         assert spec.solver.algebraic_loop.tolerance == 1e-8
         assert spec.wrapper.communication_step == 0.01
+
+    def test_variable_step_type(self, make_ssp, tmp_path):
+        solver = ET.Element("Solver")
+        solver.set("type", "variable_step")
+        ssp_path = make_ssp(
+            fmu_sources=_valid_fmu_sources(),
+            connectors=_connectors_for_two_fmus(),
+            annotations=[("cs-fmu-packager", [solver])],
+        )
+        spec = parse_spec(ssp_path, workspace_dir=str(tmp_path))
+        assert spec.solver.type == "variable_step"
 
     def test_unknown_annotation_ignored(self, make_ssp, tmp_path):
         solver = ET.Element("Solver")
