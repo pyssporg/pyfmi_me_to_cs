@@ -22,6 +22,8 @@ The primary use case (UC-001: Strongly Connected Components) requires handling a
 
 Use **fixed-point iteration** for algebraic loop handling. Expose `max_iterations` and `tolerance` as configurable parameters in the package specification. Report convergence status through FMI status codes and diagnostic logs.
 
+As of AD-008, the iteration runs **inside `combined_rhs`** at every integrator stage, at the current state and time, rather than once per communication step. This makes the loop part of the coupled equation system the integrator solves. The loop-handling policy itself (fixed-point, configurable limits) is unchanged.
+
 ## Alternatives Considered
 
 - Delayed feedback — simpler but introduces one-step delay that changes numerical behavior.
@@ -35,6 +37,8 @@ Use **fixed-point iteration** for algebraic loop handling. Expose `max_iteration
 - **Negative:** No guaranteed convergence for stiff or highly nonlinear loops.
 - **Negative:** Fixed-point iteration may require many iterations for tight tolerances.
 - **Negative:** Extra computational cost per communication step when loops exist.
+- **Note:** Since AD-008 the iteration runs on every RHS evaluation, so the
+  cost scales with the number of integrator stages, not communication steps.
 
 ## Affected Artifacts
 

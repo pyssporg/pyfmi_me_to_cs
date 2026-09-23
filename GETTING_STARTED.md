@@ -193,6 +193,8 @@ This prints each pipeline phase and any warnings from the mapping step.
   can build and simulate end-to-end
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — full configuration reference
   (vendor annotation schema, solver types, runtime solver parameters)
+- [docs/COUPLING_SEMANTICS.md](docs/COUPLING_SEMANTICS.md) — what the packaged
+  FMU solves and how internal coupling is evaluated
 - [README.md](README.md) — project overview, CLI reference, prerequisites
 - [CONTRIBUTING.md](CONTRIBUTING.md) — developer guide and how to contribute
 - [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, architecture motivation

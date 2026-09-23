@@ -42,6 +42,7 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
 
 #include "fmi2_interface.h"
 #include "solver_integration.h"
+#include "fixed_point_iteration.h"
 #include <sundials/sundials_types.h>
 #include <sundials/sundials_context.h>
 #include <arkode/arkode.h>
@@ -59,8 +60,13 @@ def generate_solver_impl(spec: PackageSpec, mapping: MappingTable) -> str:
 /* ---------------------------------------------------------------------------
  * Combined RHS function for ARKODE and CVODE.
  *
- * Computes the derivatives from all internal FMUs and concatenates them
- * into the single state vector.
+ * Evaluates the coupled system as one equation system: every internal FMU is
+ * loaded with the current time and the slice of the combined state vector it
+ * owns, the internal connections (including algebraic loops) are resolved at
+ * that exact state/time, and only then are the derivatives read back.  This
+ * means the coupling is evaluated at every integrator stage rather than held
+ * constant over a communication or fixed step, so the integrator's error
+ * control applies to the coupled system as a whole.
  * --------------------------------------------------------------------------- */
 static int combined_rhs(sunrealtype t, N_Vector y, N_Vector ydot, void* user_data)
 {{
@@ -69,6 +75,7 @@ static int combined_rhs(sunrealtype t, N_Vector y, N_Vector ydot, void* user_dat
     double* yd_data = N_VGetArrayPointer(ydot);
     int offset = 0;
 
+    /* Pass 1: load time and continuous states into every internal FMU. */
     for (int i = 0; i < wrapper->num_internal_fmus; i++) {{
         InternalFMU* fmu = &wrapper->internal_fmus[i];
         if (fmu->component == NULL) continue;
@@ -88,6 +95,23 @@ static int combined_rhs(sunrealtype t, N_Vector y, N_Vector ydot, void* user_dat
                 return -1;
             }}
         }}
+
+        offset += fmu->nx;
+    }}
+
+    /* Pass 2: resolve internal coupling at this (t, y).  This is what makes
+     * the concatenated ME systems one coupled RHS: connection targets are
+     * recomputed from the current source outputs instead of being frozen at
+     * the start of the step. */
+    if (wrapper_resolve_coupling(wrapper, (double)t) != 0) {{
+        return -1;
+    }}
+
+    /* Pass 3: read derivatives for every internal FMU. */
+    offset = 0;
+    for (int i = 0; i < wrapper->num_internal_fmus; i++) {{
+        InternalFMU* fmu = &wrapper->internal_fmus[i];
+        if (fmu->component == NULL) continue;
 
         /* Get derivatives */
         if (fmu->getDerivatives && fmu->nx > 0) {{

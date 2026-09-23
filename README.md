@@ -12,7 +12,10 @@ SSP package (.ssp) ──► cs-fmu-packager ──► Co-Simulation FMU (.fmu)
 The output CS FMU exposes a normal Co-Simulation interface to an external master algorithm,
 while internally instantiating the packaged Model Exchange FMUs, connecting their variables,
 advancing them with a configurable local solver, and exposing selected inputs, outputs,
-parameters, and status information at the wrapper boundary.
+parameters, and status information at the wrapper boundary. The internal connections and
+algebraic loops are resolved at every integrator stage, so the grouped FMUs are solved as
+one coupled equation system behind the single boundary (see
+[docs/COUPLING_SEMANTICS.md](docs/COUPLING_SEMANTICS.md)).
 
 For design intent, full scope, and architectural motivation, see
 [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) and
@@ -146,6 +149,7 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 
 - [docs/](docs/README.md) — user-facing documentation index
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — full configuration reference (vendor annotation schema, solver types, runtime solver parameters, defaults)
+- [docs/COUPLING_SEMANTICS.md](docs/COUPLING_SEMANTICS.md) — what the packaged FMU solves: one boundary, one coupled equation system, and how internal coupling is evaluated
 - [examples/quickstart](examples/quickstart/README.md) — runnable example (build + simulate)
 - [GETTING_STARTED.md](GETTING_STARTED.md) — step-by-step walkthrough
 - [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, and project overview

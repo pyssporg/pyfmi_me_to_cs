@@ -12,5 +12,7 @@ The Co-Simulation FMU Packager is a tool for wrapping one or more FMI Model Exch
 
 The packaged FMU exposes a normal Co-Simulation interface to an external master algorithm, while internally it instantiates Model Exchange FMUs, connects their variables, advances them with a selected solver, and exposes selected inputs, outputs, parameters, and status information at the wrapper boundary.
 
+Grouping places one solver and one boundary around the subsystem; it also makes the internal FMUs one coupled equation system, because their connections and algebraic loops are evaluated at every integrator stage (see AD-008 and `docs/COUPLING_SEMANTICS.md`). The two properties are related but distinct: the architecture gives one boundary, the coupled RHS gives one equation system.
+
 The main purpose is to make solver placement an explicit architectural choice. A coupled subsystem can be treated as one Co-Simulation component by the outer orchestration layer while retaining a structured internal Model Exchange representation and a local integration or loop-handling policy.
 

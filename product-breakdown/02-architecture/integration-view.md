@@ -20,10 +20,11 @@
 
 ### SUNDIALS ARKODE
 - Used in fixed-step explicit mode via `ARKStepCreate` (with `NULL` for implicit component) and `ARKStepSetFixedStep`.
-- The combined RHS function calls each internal FMU's `getDerivatives` and concatenates the results into the ARKODE state vector.
+- The combined RHS function loads the combined state into each internal FMU, resolves internal connections and algebraic loops at the current `(t, y)`, then reads and concatenates their derivatives into the ARKODE state vector (AD-008).
 
 ## Relevant Decisions
 
 - AD-001: C Wrapper Architecture (native `.so`, no Python runtime)
 - AD-002: SUNDIALS Solver (via vcpkg)
 - AD-006: Linux x86_64 Only (v1)
+- AD-008: Simultaneous Coupled RHS for Internal Connections

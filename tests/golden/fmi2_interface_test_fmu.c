@@ -879,31 +879,9 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
     inst->state = WrapperState_StepInProgress;
     inst->current_time = currentCommunicationPoint;
 
-    /* Step 1: Resolve algebraic loops (fixed-point iteration) */
-    int fp_result = fixed_point_resolve_all(inst, currentCommunicationPoint);
-    if (fp_result < 0) {
-        log_message(inst, fmi2Error, "solver", "Fixed-point iteration failed");
-        inst->state = WrapperState_Error;
-        return fmi2Error;
-    }
-
-    /* Step 2: Perform internal integration sub-steps */
-    double t_end = currentCommunicationPoint + communicationStepSize;
-    double t = currentCommunicationPoint;
-
-    while (t < t_end) {
-        double h;
-        if (inst->solver_type == SOLVER_TYPE_VARIABLE_STEP ||
-            inst->solver_type == SOLVER_TYPE_CVODE) {
-            /* Adaptive step control: evolve toward the communication point */
-            h = t_end - t;
-        } else {
-            /* Fixed-step mode: slice the communication step by step_size */
-            h = (t + inst->step_size <= t_end) ? inst->step_size : (t_end - t);
-        }
-        if (h < 1e-15) break;
-
-        /* Update input variables on internal FMUs from wrapper inputs */
+    /* Step 1: Push boundary inputs into the internal FMUs.  FMI
+     * co-simulation semantics hold these constant for the whole
+     * communication step. */
         /* Propagate real wrapper inputs to internal FMUs */
         for (int i = 0; i < inst->num_real_inputs; i++) {
             if (inst->real_inputs[i].fmu) {
@@ -941,18 +919,24 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
             }
         }
 
-        /* Propagate internal connections */
-        for (int c_idx = 0; c_idx < inst->num_connections; c_idx++) {
-            InternalFMU* src_fmu = (InternalFMU*)inst->connections_src[c_idx].fmu;
-            InternalFMU* tgt_fmu = (InternalFMU*)inst->connections_tgt[c_idx].fmu;
-            if (src_fmu && tgt_fmu) {
-                double src_val = 0.0;
-                fmi2ValueReference src_vr = inst->connections_src[c_idx].vr;
-                fmi2ValueReference tgt_vr = inst->connections_tgt[c_idx].vr;
-                src_fmu->getReal(src_fmu->component, &src_vr, 1, &src_val);
-                tgt_fmu->setReal(tgt_fmu->component, &tgt_vr, 1, &src_val);
-            }
+    /* Step 2: Integrate the coupled system over the communication step.
+     * Internal connections (including algebraic loops) are resolved inside
+     * combined_rhs() at every integrator stage, so this loop only slices
+     * fixed steps / drives adaptive stepping. */
+    double t_end = currentCommunicationPoint + communicationStepSize;
+    double t = currentCommunicationPoint;
+
+    while (t < t_end) {
+        double h;
+        if (inst->solver_type == SOLVER_TYPE_VARIABLE_STEP ||
+            inst->solver_type == SOLVER_TYPE_CVODE) {
+            /* Adaptive step control: evolve toward the communication point */
+            h = t_end - t;
+        } else {
+            /* Fixed-step mode: slice the communication step by step_size */
+            h = (t + inst->step_size <= t_end) ? inst->step_size : (t_end - t);
         }
+        if (h < 1e-15) break;
 
         /* Perform integration sub-step */
         double t_out = t;
@@ -970,7 +954,17 @@ FMI2_Export fmi2Status fmi2DoStep(fmi2Component c,
         t = t_out;
     }
 
-    /* Step 3: Update wrapper outputs from internal FMUs */
+    /* Step 3: Re-establish a self-consistent coupling at the final state and
+     * refresh the acyclic connections, so feed-through wrapper outputs read
+     * below reflect the end-of-step state. */
+    if (wrapper_resolve_coupling(inst, t_end) != 0) {
+        log_message(inst, fmi2Error, "solver", "Coupling resolution failed at t=%g", t_end);
+        inst->state = WrapperState_Error;
+        return fmi2Error;
+    }
+    wrapper_propagate_connections(inst);
+
+    /* Step 4: Update wrapper outputs from internal FMUs */
         /* Update real wrapper outputs from internal FMUs */
         for (int i = 0; i < inst->num_real_outputs; i++) {
             if (inst->real_outputs[i].fmu) {

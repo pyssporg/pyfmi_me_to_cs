@@ -4,7 +4,7 @@
 
 ## Responsibility
 
-Generates `fixed_point_iteration.c` — the fixed-point iteration implementation for resolving algebraic loops (strongly connected components) in the internal FMU graph.
+Generates `fixed_point_iteration.c` — the internal coupling evaluation used by `combined_rhs`: a single propagation pass plus fixed-point iteration that resolves algebraic loops (strongly connected components) in the internal FMU graph at a fixed state and time.
 
 ## Key Functions
 
@@ -16,15 +16,19 @@ Generates `fixed_point_iteration.c` — the fixed-point iteration implementation
 
 | Function | Description |
 | --- | --- |
-| `fixed_point_solve_loop()` | Perform fixed-point iteration for a single algebraic loop — gets source values, sets target values, checks convergence against tolerance |
-| `fixed_point_resolve_all()` | Resolve all algebraic loops in the wrapper; returns 0 on success, -1 on allocation failure |
+| `wrapper_propagate_connections()` | Single source-to-target sweep over all internal connections at the current state; resolves the acyclic part of the graph and refreshes feed-through outputs |
+| `fixed_point_solve_loop()` | Fixed-point iteration over a connection list — gets source values, sets target values, checks convergence against tolerance |
+| `wrapper_resolve_coupling()` | Resolve the full connection graph at the current state/time; returns 0 on success, -1 on allocation failure; logs non-convergence at most once per instance |
 
 ## Convergence Behavior
 
 - Iterates up to `max_iterations` times
 - Convergence: max difference across all connections < tolerance
-- Non-convergence: logged as `fmi2Warning` via FMI logger callback
+- Non-convergence: logged once as `fmi2Warning` via the FMI logger callback
 - Allocation failure: returns -1 (error)
+
+Called from `combined_rhs` on every integrator stage (AD-008); see
+`docs/COUPLING_SEMANTICS.md`.
 
 ## Source
 

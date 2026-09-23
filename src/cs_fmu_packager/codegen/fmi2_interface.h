@@ -114,6 +114,7 @@ typedef struct {
     int algebraic_loop_max_iterations;
     double algebraic_loop_tolerance;
     int num_algebraic_loops;
+    int coupling_warned;  /* non-convergence logged at most once */
 
     /* Internal FMU array */
     int num_internal_fmus;

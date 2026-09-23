@@ -31,7 +31,7 @@ Generates `fmi2_interface.c` — the main FMI 2.0 Co-Simulation entry point impl
 - `fmi2SetupExperiment`, `fmi2EnterInitializationMode`, `fmi2ExitInitializationMode`
 - `fmi2Terminate`, `fmi2Reset`
 - `fmi2GetReal`/`fmi2SetReal`, `fmi2GetInteger`/`fmi2SetInteger`, `fmi2GetBoolean`/`fmi2SetBoolean`, `fmi2GetString`/`fmi2SetString`
-- `fmi2DoStep` (resolve algebraic loops → propagate inputs → internal connections → solver sub-steps → update outputs)
+- `fmi2DoStep` (push boundary inputs → integrate coupled system via `solver_step` → re-resolve coupling at final state → update outputs; coupling itself is resolved inside `combined_rhs`)
 - `fmi2CancelStep`
 - Status inquiry functions
 

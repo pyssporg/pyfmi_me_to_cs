@@ -105,6 +105,14 @@ Adaptive solver types (`variable_step`, `cvode`) ignore `stepSize` and evolve
 directly to the communication point; all others slice the communication step
 by `stepSize`.
 
+All solver types evaluate the **coupled** internal system: on every integrator
+stage the internal connections and algebraic loops are resolved at the current
+state and time (see [Coupling and solver semantics](COUPLING_SEMANTICS.md)).
+`stepSize` therefore controls the integration accuracy of the whole coupled
+system, not the rate at which internal coupling is sampled. For adaptive
+solvers, `solver.tolerance` controls that accuracy independently of the
+communication step.
+
 ## 4. Runtime solver parameters (master-visible)
 
 The packaged CS FMU exposes three **reserved** parameters that the external
@@ -115,7 +123,7 @@ runtime. They are wrapper-local: they are not forwarded to any internal FMU.
 | Parameter | FMI type | Start value | Meaning |
 |-----------|----------|-------------|---------|
 | `solver.type` | Integer | enum value of the build-time solver type | Solver type (see [§3](#3-solver-types)) |
-| `solver.tolerance` | Real | build-time tolerance | Integration tolerance (relative and absolute) |
+| `solver.tolerance` | Real | build-time tolerance | Integration tolerance (relative and absolute) for the coupled system |
 | `solver.step_size` | Real | build-time step size | Fixed-step integration step size |
 
 ## 5. Boundary variables
@@ -179,6 +187,7 @@ The generated CS FMU advertises:
 
 ## 9. Related
 
+- Coupling and solver semantics: [`COUPLING_SEMANTICS.md`](COUPLING_SEMANTICS.md)
 - Runnable example: `examples/quickstart/`
 - Implementation: `src/cs_fmu_packager/ssp_spec.py` (`_parse_vendor_config`),
   `src/cs_fmu_packager/models.py` (dataclasses and reserved parameters),

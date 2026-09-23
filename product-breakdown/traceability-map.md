@@ -81,3 +81,19 @@ CON-001 First version targets Linux x86_64 only
       -> 03-implementation/environments.md (Linux x86_64, GCC, CMake)
         -> CMakePresets.json (Linux build preset)
 ```
+
+## Trace Chain 7: Coupled Equation System Semantics
+
+```
+INT-002 Enable configurable local solver placement
+  -> CAP-002 Support configurable local solver
+    -> UC-002 Wrap a Tightly Coupled Physical Subsystem
+      -> AD-008 Simultaneous Coupled RHS for Internal Connections
+        -> docs/COUPLING_SEMANTICS.md (one boundary, one coupled equation system)
+        -> docs/CONFIGURATION.md (solver semantics)
+        -> 03-implementation/modules/codegen-solver.md (combined_rhs three passes)
+        -> 03-implementation/modules/codegen-fixed-point.md (wrapper_resolve_coupling)
+        -> 02-architecture/decisions/AD-003-fixed-point-iteration.md (loops resolved per RHS)
+          -> 04-verification/test-cases/test_codegen.md (RHS coupling assertions)
+          -> 04-verification/test-cases/test_end_to_end.md (algebraic loop + chain runtime tests)
+```
