@@ -316,6 +316,16 @@ int solver_step(WrapperInstance* wrapper, double t0, double h, double* t_out)
             return 0;
         }}
 
+        /* Pin the integrator's internal time to the end of this
+         * communication interval.  CV_NORMAL integrates *past* tout when a
+         * step would overshoot and returns an interpolated value, so without
+         * a stop time tn can run far ahead during a quiescent interval and a
+         * later master-side input change is never seen. */
+        if (CVodeSetStopTime(wrapper->cvode_mem,
+                             (sunrealtype)(t0 + h)) != 0) {{
+            return -1;
+        }}
+
         sunrealtype t_ret = (sunrealtype)t0;
         int flag = CVode(wrapper->cvode_mem, (sunrealtype)(t0 + h),
                          (N_Vector)wrapper->nv_state, &t_ret, CV_NORMAL);
@@ -331,6 +341,13 @@ int solver_step(WrapperInstance* wrapper, double t0, double h, double* t_out)
     if (wrapper->arkode_mem == NULL) {{
         *t_out = t0 + h;
         return 0;
+    }}
+
+    /* Same bound for the adaptive ARKODE modes: ARK_NORMAL can also return
+     * an interpolated value while tn is ahead of the communication point. */
+    if (ARKodeSetStopTime(wrapper->arkode_mem,
+                          (sunrealtype)(t0 + h)) != 0) {{
+        return -1;
     }}
 
     sunrealtype t_ret = (sunrealtype)t0;
