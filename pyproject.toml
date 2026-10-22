@@ -11,7 +11,7 @@ license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
-    "pyssp-standard @ git+https://github.com/jkCXf9X4/pyssp_standard@architecture_review",
+    "pyssp-standard @ git+https://github.com/pyssporg/experimental_pyssp_standard@e2ac49a58481ca5af953965b1c00672103a97d67",
 ]
 
 [project.scripts]
