@@ -27,7 +27,7 @@ import pytest
 _OMC_AVAILABLE = shutil.which("omc") is not None
 _FMPY_AVAILABLE = False
 try:
-    import fmpy  # noqa: F401
+    import fmpy
     _FMPY_AVAILABLE = True
 except ImportError:
     pass
