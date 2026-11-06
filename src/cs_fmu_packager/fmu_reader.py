@@ -13,7 +13,7 @@ import os
 import re
 import zipfile
 
-from pyssp_standard.fmu import FMU
+from pyssp_standard import FMU
 from pyssp_standard.standard.fmi2.model.model_description import (
     Fmi2ModelDescriptionDocument,
 )

@@ -15,7 +15,7 @@ import zipfile
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pyssp_standard.fmu import FMU
+from pyssp_standard import FMU
 
 from cs_fmu_packager.errors import PackagingError
 from cs_fmu_packager.model_description import generate_model_description
