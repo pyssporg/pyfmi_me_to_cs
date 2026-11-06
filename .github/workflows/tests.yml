@@ -1,10 +1,9 @@
-name: CI
+name: tests
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 env:
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
@@ -13,7 +12,9 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
 
@@ -43,6 +44,11 @@ jobs:
 
       - name: Install Python package
         run: pip install -e ".[dev,test]"
+
+      - name: Lint
+        run: |
+          python -m pip install ruff
+          ruff check src tests
 
       - name: Install OpenModelica
         run: sudo apt-get update && sudo apt-get install -y omc
