@@ -13,7 +13,7 @@ dependencies = [
     "click>=8.0",
     "toml>=0.10",
     
-    "experimental-pyssp-standard @ https://github.com/pyssporg/experimental_pyssp_standard/releases/download/v0.9.2.dev0/experimental_pyssp_standard-0.9.2.dev0-py3-none-any.whl",
+    "experimental-pyssp-standard @ https://github.com/pyssporg/experimental_pyssp_standard/releases/download/v0.9.3.dev0/experimental_pyssp_standard-0.9.3.dev0-py3-none-any.whl",
 ]
 
 [project.scripts]
