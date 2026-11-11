@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cs-fmu-packager"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Package FMI 2.0 Model Exchange FMUs into a single Co-Simulation FMU"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "click>=8.0",
     "toml>=0.10",
@@ -31,6 +31,9 @@ test = [
     "numpy>=1.20",
     "pandas>=1.3",
 ]
+
+[tool.setuptools.dynamic]
+version = { attr = "cs_fmu_packager.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
