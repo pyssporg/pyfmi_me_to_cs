@@ -7,7 +7,7 @@ with proper capability flags and wrapper variable declarations.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import List
 from xml.sax.saxutils import escape
 
@@ -60,7 +60,7 @@ def _derive_guid(spec: PackageSpec) -> str:
 
 def _now_iso() -> str:
     """Generate ISO timestamp for generation date."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _variability_for_causality(causality: str) -> str:
