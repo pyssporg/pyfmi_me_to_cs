@@ -21,8 +21,8 @@ The primary configuration input is a complete SSP package (`.ssp`) — a ZIP arc
 Python package configuration:
 - Package name: `cs-fmu-packager`
 - Version: `0.1.1`
-- Python: `>=3.10`
-- Dependencies: `click>=8.0`, `pyssp-standard>=0.8` (SSP 1.0 SSD + FMI metadata); `toml` removed with the TOML front-end (IMP-029)
+- Python: `>=3.11`
+- Dependencies: `click>=8.0`, `toml>=0.10`, and the `experimental-pyssp-standard` release wheel (SSP 1.0 SSD + FMI metadata as `pyssp_standard`); the TOML front-end removal is IMP-029
 - Entry point: `cs-fmu-packager = "cs_fmu_packager.cli:main"`
 
 ## CMakePresets.json
