@@ -1,95 +1,62 @@
-# Quickstart Example
+# Quickstart example
 
-A fully runnable example: a two-node Model Exchange chain packaged into a
-single Co-Simulation FMU.
+Generate two Model Exchange FMUs from Modelica, package them into
+`quickstart.ssp`, and convert that package into one FMI 2.0 Co-Simulation FMU.
 
-```
-        +-----------------+      +-------------+
- u ────►│ m00: Integrator │ y ──►│ m01: Gain   │── y ───► (wrapper output)
-        +-----------------+      +-------------+
-```
+## Run
 
-- `m00` integrates `u` (`der(x) = gain·u`, `gain = 1.0`)
-- `m01` amplifies the result (`y = k·u`, `k = 2.0`)
-- Expected steady-state: a unit step on `u` yields `y ≈ 2.0`
-
-## Prerequisites
-
-- `omc` (OpenModelica compiler) — generate the ME FMUs
-- CMake ≥ 3.20, a C compiler (gcc/clang)
-- vcpkg with SUNDIALS installed, `VCPKG_ROOT` set
-  (see `../../GETTING_STARTED.md` for the vcpkg setup)
-- cs-fmu-packager installed (`pip install -e .` from the repo root)
-
-## 1. Build the SSP package
+From the workspace root, in the workspace venv:
 
 ```bash
-python build_example.py            # writes quickstart.ssp in this directory
+python repos/pyfmi_me_to_cs/examples/quickstart/build_example.py
 ```
 
-This generates `integrator.fmu` and `gain.fmu` with OMC and assembles the
-complete `quickstart.ssp` archive from `SystemStructure.ssd`.
+That is the whole example: it builds `integrator.fmu` and `gain.fmu` with
+`omc`, packages both with `SystemStructure.ssd` into `quickstart.ssp`, then
+runs `python -m cs_fmu_packager` for `quickstart.fmu`. Everything lands under
+the gitignored `build/examples/quickstart/`:
 
-## 2. Validate (dry run)
-
-```bash
-python -m cs_fmu_packager quickstart.ssp --dry-run
-```
+| Path | What |
+| --- | --- |
+| `build/examples/quickstart/integrator.fmu` | `m00` Model Exchange FMU |
+| `build/examples/quickstart/gain.fmu` | `m01` Model Exchange FMU |
+| `build/examples/quickstart/quickstart.ssp` | SSP package with both FMUs |
+| `build/examples/quickstart/quickstart.fmu` | Co-Simulation wrapper FMU |
 
 Expected output:
 
-```
-Dry run: spec validated and FMUs inspected successfully.
-  Execution order: m00 -> m01
-  Algebraic loops: 0
+```text
+build/examples/quickstart/integrator.fmu
+build/examples/quickstart/gain.fmu
+build/examples/quickstart/quickstart.ssp
+build/examples/quickstart/quickstart.fmu
 ```
 
-## 3. Build the Co-Simulation FMU
+Pass `--out DIR` to write elsewhere.
+
+## Setup
+
+Needs `omc` (OpenModelica), `cmake`, a C compiler, and vcpkg with SUNDIALS
+installed (`VCPKG_ROOT` set; see `../../GETTING_STARTED.md`). Then the
+workspace venv plus the one editable it does not list:
 
 ```bash
-python -m cs_fmu_packager quickstart.ssp --report build-report.json
+python -m venv .venv-experimental
+source .venv-experimental/bin/activate
+pip install --no-deps -r requirements-experimental.txt
+pip install -r requirements-thirdparty.txt
+pip install --no-deps -e repos/pyfmi_me_to_cs
 ```
 
-Expected output:
+## Composition
 
-```
-Successfully created: quickstart.fmu
-  2 FMU(s), 5 variable(s), 1 connection(s)
-```
+`SystemStructure.ssd` composes two units and exposes the boundary connectors
+`u` and `y`:
 
-The count includes the three wrapper-local solver parameters
-(`solver.type`, `solver.tolerance`, `solver.step_size`) — see
-`../../docs/CONFIGURATION.md` for the full boundary contract.
+- `m00` integrates `u` (`der(x) = gain·u`, `gain = 1.0`);
+- `m01` amplifies the result (`y = k·u`, `k = 2.0`), and its output is `y`;
+- the `cs-fmu-packager` annotation selects the solver and communication step
+  used by the wrapper.
 
-## 4. Simulate with an external master
-
-```bash
-python - <<'EOF'
-import fmpy
-res = fmpy.simulate_fmu("quickstart.fmu", stop_time=1.0, start_values={"u": 1.0})
-print(res)
-EOF
-```
-
-The final value of `y` should be ≈ `2.0`.
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `SystemStructure.ssd` | SSP 1.0 system structure description (boundary connectors, connection, vendor solver annotation) |
-| `models/Integrator.mo`, `models/Gain.mo` | Modelica sources |
-| `build_example.py` | Generates the ME FMUs and assembles `quickstart.ssp` |
-
-## Configuration
-
-The vendor annotation in `SystemStructure.ssd` configures the wrapper:
-
-```xml
-<Solver type="fixed_step" stepSize="1e-3" tolerance="1e-6" communicationStep="1e-2" />
-<AlgebraicLoop maxIterations="100" tolerance="1e-6" />
-<Wrapper communicationStep="1e-2" />
-```
-
-Try changing `Solver type="variable_step"` or `type="cvode"`, then rebuild.
-All options are documented in `../../docs/CONFIGURATION.md`.
+The units are `models/Integrator.mo` and `models/Gain.mo`; the SSD is example
+input and is packaged unchanged.

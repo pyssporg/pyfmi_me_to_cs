@@ -1,109 +1,111 @@
-#!/usr/bin/env python3
-"""Build the runnable quickstart example.
+"""Build the quickstart SSP and convert it to one Co-Simulation FMU.
 
-Generates the two Model Exchange FMUs (``integrator``, ``gain``) from the
-Modelica sources in ``models/`` using the OpenModelica compiler (``omc``),
-then assembles a complete ``quickstart.ssp`` archive from the static
-``SystemStructure.ssd`` plus the generated FMUs.
+Generates the two Model Exchange FMUs from ``models/`` with ``omc``, packages
+them with ``SystemStructure.ssd`` into ``quickstart.ssp`` through
+``pyssp_standard.SSP``, then converts that package to ``quickstart.fmu`` with
+``python -m cs_fmu_packager``.
 
-Prerequisites:
-    - ``omc`` (OpenModelica compiler) on PATH
-    - cs-fmu-packager installed (``pip install -e .``)
+Run from the workspace root:
 
-Usage::
+    python repos/pyfmi_me_to_cs/examples/quickstart/build_example.py
 
-    python build_example.py [output_dir]
-
-Outputs ``<output_dir>/quickstart.ssp`` (default: this directory).
+Everything is written under ``build/examples/quickstart/`` unless ``--out`` is
+given.
 """
 
 from __future__ import annotations
 
-import os
+import argparse
 import shutil
 import subprocess
 import sys
 import tempfile
-import zipfile
+from pathlib import Path
 
-_HERE = os.path.abspath(os.path.dirname(__file__))
-_SSD = os.path.join(_HERE, "SystemStructure.ssd")
-_MODELS_DIR = os.path.join(_HERE, "models")
+from pyssp_standard import SSP
 
-_MODELS = {
-    "integrator": "Integrator",
-    "gain": "Gain",
-}
-
-
-def find_omc() -> str | None:
-    return shutil.which("omc")
+EXAMPLE_DIR = Path(__file__).resolve().parent
+SSD = EXAMPLE_DIR / "SystemStructure.ssd"
+MODELS_DIR = EXAMPLE_DIR / "models"
+COMPONENTS = {"m00": ("Integrator", "integrator"), "m01": ("Gain", "gain")}
+DEFAULT_OUT = Path("build/examples/quickstart")
 
 
-def _write_mos_script(model_name: str, mo_path: str, prefix: str) -> str:
-    lines = [
-        "loadModel(Modelica);",
-        f'loadFile("{mo_path}");',
-        f'buildModelFMU({model_name}, version="2.0", fmuType="me", '
-        f'fileNamePrefix="{prefix}");',
-        "getErrorString();",
-    ]
-    fd, path = tempfile.mkstemp(suffix=".mos", prefix=f"{prefix}_")
-    with os.fdopen(fd, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    return path
-
-
-def _generate_fmu(model_name: str, prefix: str, output_dir: str) -> str:
-    mos_script = _write_mos_script(
-        model_name,
-        os.path.join(_MODELS_DIR, f"{model_name}.mo"),
-        prefix,
-    )
-    with tempfile.TemporaryDirectory() as work_dir:
-        local_mos = os.path.join(work_dir, os.path.basename(mos_script))
-        shutil.copy2(mos_script, local_mos)
-        subprocess.run(
-            ["omc", local_mos], cwd=work_dir, check=True,
-            capture_output=True, text=True, timeout=120,
-        )
-        src = os.path.join(work_dir, f"{prefix}.fmu")
-        if not os.path.isfile(src):
-            raise RuntimeError(f"omc did not produce {prefix}.fmu")
-        dst = os.path.join(output_dir, f"{prefix}.fmu")
-        shutil.move(src, dst)
+def _run(command: list[str], *, cwd: str | None = None) -> None:
     try:
-        os.unlink(mos_script)
-    except OSError:
-        pass
-    return dst
+        subprocess.run(command, cwd=cwd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as error:
+        raise SystemExit((error.stderr or error.stdout).strip()) from error
 
 
-def build_ssp(output_dir: str) -> str:
-    os.makedirs(output_dir, exist_ok=True)
-    omc = find_omc()
-    if omc is None:
-        print("[ERROR] omc not found on PATH. Install OpenModelica "
-              "(e.g. `sudo apt install omc`) and try again.")
-        sys.exit(1)
-    print(f"Using omc: {omc}")
+def _build_fmu(model: str, prefix: str, output_dir: Path) -> Path:
+    script = (
+        "loadModel(Modelica);\n"
+        f'loadFile("{MODELS_DIR / f"{model}.mo"}");\n'
+        f'buildModelFMU({model}, version="2.0", fmuType="me", '
+        f'fileNamePrefix="{prefix}");\n'
+        "getErrorString();\n"
+    )
+    with tempfile.TemporaryDirectory() as work:
+        mos = Path(work) / f"{prefix}.mos"
+        mos.write_text(script, encoding="utf-8")
+        _run(["omc", mos.name], cwd=work)
+        source = Path(work) / f"{prefix}.fmu"
+        target = output_dir / source.name
+        shutil.move(source, target)
+    return target
 
-    for prefix, model in _MODELS.items():
-        path = _generate_fmu(model, prefix, output_dir)
-        print(f"  [OK] generated {path}")
 
-    ssp_path = os.path.join(output_dir, "quickstart.ssp")
-    with zipfile.ZipFile(ssp_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(_SSD, "SystemStructure.ssd")
-        for prefix in _MODELS:
-            zf.write(
-                os.path.join(output_dir, f"{prefix}.fmu"),
-                f"resources/{prefix}.fmu",
-            )
-    print(f"  [OK] assembled {ssp_path}")
+def _assemble_ssp(output_dir: Path, fmus: dict[str, Path]) -> Path:
+    ssp_path = output_dir / "quickstart.ssp"
+    with SSP(ssp_path, mode="w") as ssp:
+        # The SSD is authored input, so it goes to the archive root as-is.
+        ssp.runtime.add_file(SSD, target_name="SystemStructure.ssd")
+        for fmu in fmus.values():
+            ssp.add_resource(fmu)
     return ssp_path
 
 
+def _to_cs_fmu(ssp_path: Path) -> Path:
+    fmu_path = ssp_path.with_suffix(".fmu")
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "cs_fmu_packager",
+            str(ssp_path),
+            "-o",
+            str(fmu_path),
+        ]
+    )
+    return fmu_path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=DEFAULT_OUT,
+        help=f"output directory (default: {DEFAULT_OUT})",
+    )
+    args = parser.parse_args()
+
+    if shutil.which("omc") is None:
+        raise SystemExit("omc is required (OpenModelica compiler)")
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    fmus = {
+        component: _build_fmu(model, prefix, args.out)
+        for component, (model, prefix) in COMPONENTS.items()
+    }
+    for fmu in fmus.values():
+        print(fmu)
+
+    ssp_path = _assemble_ssp(args.out, fmus)
+    print(ssp_path)
+    print(_to_cs_fmu(ssp_path))
+
+
 if __name__ == "__main__":
-    out = sys.argv[1] if len(sys.argv) > 1 else _HERE
-    build_ssp(os.path.abspath(out))
+    main()
