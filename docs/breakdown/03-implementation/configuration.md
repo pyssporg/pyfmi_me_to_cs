@@ -22,7 +22,7 @@ Python package configuration:
 - Package name: `cs-fmu-packager`
 - Version: `0.1.1`
 - Python: `>=3.11`
-- Dependencies: `click>=8.0`, `toml>=0.10`, and the `experimental-pyssp-standard` release wheel (SSP 1.0 SSD + FMI metadata as `pyssp_standard`); the TOML front-end removal is IMP-029
+- Dependencies: `click>=8.0`, `toml>=0.10`, `pyfmi-interfaces>=0.5.1` (the shared FMI 2.0 document and annotation model), and the `experimental-pyssp-standard` release wheel (SSP 1.0 SSD + FMI metadata as `pyssp_standard`); the TOML front-end removal is IMP-029
 - Entry point: `cs-fmu-packager = "cs_fmu_packager.cli:main"`
 
 ## CMakePresets.json

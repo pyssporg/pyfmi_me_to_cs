@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "click>=8.0",
     "toml>=0.10",
-    
+    "pyfmi-interfaces>=0.5.1",
     "experimental-pyssp-standard @ https://github.com/pyssporg/experimental_pyssp_standard/releases/download/v0.9.4.dev0/experimental_pyssp_standard-0.9.4.dev0-py3-none-any.whl",
 ]
 

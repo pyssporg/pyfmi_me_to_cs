@@ -25,7 +25,8 @@ pyfmi_me_to_cs/
 │       ├── models.py              # Data models (dataclasses)
 │       ├── fmu_reader.py          # FMU inspection and XML parsing
 │       ├── mapper.py              # Variable mapping and SCC detection
-│       ├── model_description.py   # modelDescription.xml generation
+│       ├── model_description.py   # modelDescription assembly (pyfmi_interfaces document + payload)
+│       ├── guid.py                # Deterministic GUID from spec content
 │       ├── builder.py             # CMake build integration
 │       ├── packager.py            # FMU ZIP assembly
 │       ├── errors.py              # Custom exception hierarchy
@@ -58,7 +59,7 @@ The Python package is organized as a flat module tree with a `codegen/` sub-pack
 - **Entry point**: `cli.py` (via `__main__.py` and `pyproject.toml` script)
 - **Data models**: `models.py` (used by all other modules)
 - **Pipeline modules**: `ssp_spec.py`, `fmu_reader.py`, `mapper.py`, `codegen/` (sub-package), `builder.py`, `packager.py`
-- **Support**: `errors.py`, `model_description.py`
+- **Support**: `errors.py`, `model_description.py` (payload assembly over the `pyfmi_interfaces` document), `guid.py`
 
 ## Test Layout
 

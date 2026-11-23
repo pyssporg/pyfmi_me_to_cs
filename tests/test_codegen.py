@@ -128,6 +128,30 @@ class TestModelDescriptionCodegen:
         assert "output1" in content
         assert "Connection" in content
 
+    def test_generation_tool_and_annotation_are_readable(self, sample_spec, sample_mapping):
+        """The document reports the shared tooling and one readable annotation."""
+        from pyfmi_interfaces import ModelDescriptionXmlCodec
+
+        content = generate_model_description(sample_spec, sample_mapping)
+        assert 'generationTool="pyfmi_interfaces tooling"' in content
+
+        model = ModelDescriptionXmlCodec().parse(content)
+        assert model.annotation_names == ("cs-fmu-packager",)
+        assert 'solverType="fixed_step"' in model.annotations[0].payload
+
+    def test_canonical_vendor_annotations_structure(self, sample_spec, sample_mapping):
+        """One canonical VendorAnnotations block, before ModelVariables."""
+        content = generate_model_description(sample_spec, sample_mapping)
+
+        root = ET.fromstring(content)
+        tags = [child.tag for child in root]
+        assert tags.count("VendorAnnotations") == 1
+        assert tags.index("VendorAnnotations") < tags.index("ModelVariables")
+        tools = root.find("VendorAnnotations").findall("Tool")
+        assert [tool.get("name") for tool in tools] == ["cs-fmu-packager"]
+        assert tools[0].find("CsFmuPackager") is not None
+        assert tools[0].find("CsFmuPackager/InternalConnections") is not None
+
     def test_variable_preservation(self, sample_spec, sample_mapping):
         """VR-003: Expose wrapper inputs/outputs with stable names."""
         content = generate_model_description(sample_spec, sample_mapping)

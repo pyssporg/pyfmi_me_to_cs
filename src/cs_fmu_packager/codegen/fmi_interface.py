@@ -10,7 +10,7 @@ from cs_fmu_packager.models import (
     SOLVER_TYPE_ENUM,
     SOLVER_TYPE_PARAM,
 )
-from cs_fmu_packager.model_description import _derive_guid
+from cs_fmu_packager.guid import derive_guid
 
 
 def _continuous_states(doc) -> int:
@@ -104,7 +104,7 @@ def generate_fmi_interface_impl(spec: PackageSpec, mapping: MappingTable) -> str
     state machine, internal FMU loading, and variable mapping.
     """
     fmu_name = spec.metadata.get("identifier", "cs_fmu")
-    fmu_guid = _derive_guid(spec)
+    fmu_guid = derive_guid(spec)
     num_fmus = len(spec.fmus)
     num_inputs = len(mapping.wrapper_inputs)
     num_outputs = len(mapping.wrapper_outputs)

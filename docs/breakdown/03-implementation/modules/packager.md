@@ -18,13 +18,13 @@ FMU assembly and packaging. Assembles the final FMU ZIP archive with determinist
 
 ## FMU Assembly Steps (Deterministic — default `date_time=None`)
 
-1. Write `modelDescription.xml` (from `model_description.py`)
+1. Write `modelDescription.xml` (the `pyfmi_interfaces` document assembled by `model_description.py`)
 2. Write compiled `.so` to `binaries/linux64/<fmu_name>.so`
 3. Embed internal ME FMUs in `resources/<fmu_id>.fmu`
 
 ## FMU Assembly Steps (Non-deterministic — `date_time` provided)
 
-1. Write `modelDescription.xml` to temp file
+1. Write the `pyfmi_interfaces` document assembled by `model_description.py` to a temp file
 2. Use `FMU.create(output_path, model_description=xml_path, binaries={"linux64": so_path})`
 3. Open FMU in append mode, add internal FMUs via `add_resource()`
 4. Call `FMU.set_generation_date_and_time(date_time)`

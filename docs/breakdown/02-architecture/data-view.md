@@ -9,7 +9,7 @@
 | `MappingTable` | Resolved mapping: variables, connections, algebraic loops, execution order | `mapper.py` | Phase 3 |
 | Generated C source files | `fmi2_interface.c`, `solver_integration.c`, `fixed_point_iteration.c` | `codegen/*.py` | Phase 4 |
 | `CMakeLists.txt` | CMake build configuration | `codegen/cmake.py` | Phase 4 |
-| `modelDescription.xml` | FMI 2.0 Co-Simulation model description for output FMU | `model_description.py` | Phase 4, 6 |
+| `modelDescription.xml` | FMI 2.0 Co-Simulation model description for output FMU; document rendered by `pyfmi_interfaces`, payload supplied by `model_description.py` | `pyfmi_interfaces` (payload: `model_description.py`) | Phase 4, 6 |
 | `BuildResult` | Build outcome: .so path, tool versions, architecture info | `builder.py` | Phase 5 |
 | `BuildReport` | Machine-readable packaging summary | `packager.py` | Phase 6 |
 | `.fmu` file | Final ZIP archive containing modelDescription.xml, .so, resources/ | `packager.py` | Phase 6 |
