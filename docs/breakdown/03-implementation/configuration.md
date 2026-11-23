@@ -2,7 +2,7 @@
 
 > **Canonical source:** the complete, user-facing configuration reference
 > (vendor annotation schema, solver types, runtime solver parameters,
-> precedence, defaults) is [`docs/CONFIGURATION.md`](../../docs/CONFIGURATION.md).
+> precedence, defaults) is [`docs/CONFIGURATION.md`](../../CONFIGURATION.md).
 > This page documents the packaging configuration surfaces for the
 > product-breakdown structure.
 

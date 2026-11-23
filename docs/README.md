@@ -2,7 +2,7 @@
 
 User-facing documentation for cs-fmu-packager. The project also keeps a full
 product breakdown (intent, product, architecture, implementation,
-verification, operation, evolution) under [`product-breakdown/`](../product-breakdown/README.md).
+verification, operation, evolution) under [`breakdown/`](breakdown/README.md).
 
 - [Configuration reference](CONFIGURATION.md) — the canonical reference for
   every configurable aspect: vendor annotation schema, solver types, runtime

@@ -83,11 +83,12 @@ outputs, parameters, and status information at the wrapper boundary.
 
 ## Environment
 
-- Python >= 3.10; CI runs 3.11 and 3.12.
+- Python >= 3.11 (`requires-python`); the CI matrix currently lists 3.10,
+  3.11, and 3.12, so 3.10 is below the package floor.
 - CMake >= 3.20, C compiler (gcc/clang), vcpkg with SUNDIALS.
 - `python3 -m venv venv`, `source venv/bin/activate`,
   `pip install -e ".[dev]"`.
-- Tests: `python3 -m pytest -m "not slow"` (the CI gate); a bare
-  `python3 -m pytest` includes the slow set.
-- Lint: `ruff check src tests`.
+- Tests: `python3 -m pytest -m "not verification"` (the CI gate); a bare
+  `python3 -m pytest` includes the OMC/fmpy verification set.
+- Lint: `ruff check src tests` (`ruff.toml` at the repo root configures it).
 - Build: `python -m build --wheel --sdist`.

@@ -2,7 +2,7 @@
 
 This is the canonical reference for every configurable aspect of
 `cs-fmu-packager`. It is authoritative over the brief notes in `README.md`,
-`GETTING_STARTED.md`, and the module docs under `product-breakdown/`.
+`GETTING_STARTED.md`, and the module docs under `docs/breakdown/`.
 
 Configuration is expressed at **four levels**, in increasing precedence:
 
@@ -188,7 +188,7 @@ The generated CS FMU advertises:
 ## 9. Related
 
 - Coupling and solver semantics: [`COUPLING_SEMANTICS.md`](COUPLING_SEMANTICS.md)
-- Runnable example: `examples/quickstart/`
+- Runnable example: `../examples/quickstart/`
 - Implementation: `src/cs_fmu_packager/ssp_spec.py` (`_parse_vendor_config`),
   `src/cs_fmu_packager/models.py` (dataclasses and reserved parameters),
   `src/cs_fmu_packager/mapper.py` (auto-discovery and warnings)

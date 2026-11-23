@@ -1,6 +1,6 @@
 # cs-fmu-packager
 
-[![CI](https://github.com/pyssporg/pyfmi_me_to_cs/actions/workflows/test.yml/badge.svg)](https://github.com/pyssporg/pyfmi_me_to_cs/actions/workflows/test.yml)
+[![CI](https://github.com/pyssporg/pyfmi_me_to_cs/actions/workflows/tests.yml/badge.svg)](https://github.com/pyssporg/pyfmi_me_to_cs/actions/workflows/tests.yml)
 
 Convert a complete SSP package (`.ssp`) — one or more FMI 2.0 Model Exchange FMUs wired
 together in a `SystemStructure.ssd` — into a single FMI 2.0 Co-Simulation FMU (`.fmu`).
@@ -18,18 +18,19 @@ one coupled equation system behind the single boundary (see
 [docs/COUPLING_SEMANTICS.md](docs/COUPLING_SEMANTICS.md)).
 
 For design intent, full scope, and architectural motivation, see
-[product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) and
-[product-breakdown/README.md](product-breakdown/README.md).
+[docs/breakdown/00-intent/purpose.md](docs/breakdown/00-intent/purpose.md) and
+[docs/breakdown/README.md](docs/breakdown/README.md).
 
 ## Prerequisites
 
 | Dependency | Minimum Version | Notes |
 |-----------|----------------|-------|
-| Python | 3.10 | |
+| Python | 3.11 | |
 | CMake | 3.20 | Build system for the generated C wrapper |
-| C compiler | — | gcc or clang (Linux x86_64, see [AD-006](product-breakdown/02-architecture/decisions/AD-006-linux-x86-64-v1.md)) |
-| vcpkg      | —              | With [SUNDIALS](product-breakdown/02-architecture/decisions/AD-002-sundials-solver.md) installed (see [AD-007](product-breakdown/02-architecture/decisions/AD-007-vcpkg-package-manager.md)) |
-| pyssp-standard | 0.8        | FMU metadata inspection (installed automatically via pip) |
+| C compiler | — | gcc or clang (Linux x86_64, see [AD-006](docs/breakdown/01-product/decisions/AD-006-linux-x86-64-v1.md)) |
+| vcpkg      | —              | With [SUNDIALS](docs/breakdown/02-architecture/decisions/AD-002-sundials-solver.md) installed (see [AD-007](docs/breakdown/02-architecture/decisions/AD-007-vcpkg-package-manager.md)) |
+| pyssp_standard | 0.9.4.dev0 | FMU and SSP metadata inspection, from the `experimental-pyssp-standard` release wheel (installed automatically via pip) |
+| pyfmi-interfaces | 0.5.1 | FMI 2.0 model description emission (installed automatically via pip) |
 
 ## Installation
 
@@ -97,7 +98,7 @@ zip -r my_system.ssp SystemStructure.ssd resources/
 > packaged boundary — either through the system `<Connectors>` you declare, or
 > automatically by default. This enables get/set and observation of all
 > internal values from an external master (see
-> [IMP-029](product-breakdown/06-evolution/done/IMP-029-ssp-ssd-input-format.md)).
+> [IMP-029](docs/breakdown/06-evolution/done/IMP-029-ssp-ssd-input-format.md)).
 > The complete configuration reference is in
 > [docs/CONFIGURATION.md](docs/CONFIGURATION.md), and a fully runnable example
 > is in [examples/quickstart](examples/quickstart/README.md).
@@ -116,7 +117,7 @@ or `--dry-run` to validate the package and inspect FMUs without building.
 The packager runs a six-phase pipeline from the input `.ssp` to the output CS FMU:
 
 1. **Parse** — read `SystemStructure.ssd` from the archive and extract the embedded
-   Model Exchange FMUs (see `product-breakdown/03-implementation/modules/ssp_spec.md`).
+   Model Exchange FMUs (see `docs/breakdown/03-implementation/modules/ssp_spec.md`).
 2. **Inspect** — read each internal FMU's `modelDescription.xml`.
 3. **Map** — resolve boundary connectors and internal connections to FMU variables,
    detect algebraic loops, and compute the execution order.
@@ -145,6 +146,28 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 | `-v, --verbose` | Enable diagnostic pipeline logging |
 | `--help` | Show usage and exit |
 
+## Development
+
+Contributor rules, layout, and native prerequisites are in [AGENTS.md](AGENTS.md);
+the lint configuration is [ruff.toml](ruff.toml).
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -e ".[dev,test]"
+
+# CI gate: unit and integration tests, without the OMC/fmpy verification suite
+python3 -m pytest -m "not verification"
+# Behavioral verification (requires omc and fmpy)
+python3 -m pytest -m verification tests/test_cs_behavior_verification.py
+# Lint (the same command CI runs)
+ruff check src tests
+# Runnable quickstart example (requires omc; see examples/quickstart/README.md)
+make example
+```
+
+A bare `python3 -m pytest` selects the verification tests too.
+
 ## Documentation
 
 - [docs/](docs/README.md) — user-facing documentation index
@@ -152,6 +175,6 @@ python -m cs_fmu_packager [OPTIONS] SPEC
 - [docs/COUPLING_SEMANTICS.md](docs/COUPLING_SEMANTICS.md) — what the packaged FMU solves: one boundary, one coupled equation system, and how internal coupling is evaluated
 - [examples/quickstart](examples/quickstart/README.md) — runnable example (build + simulate)
 - [GETTING_STARTED.md](GETTING_STARTED.md) — step-by-step walkthrough
-- [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, and project overview
-- [product-breakdown/](product-breakdown/) — full product breakdown structure (7 layers: intent, product, architecture, implementation, verification, operation, evolution)
-- [product-breakdown/decision-log.md](product-breakdown/decision-log.md) — architecture decisions (AD-001 through AD-007)
+- [docs/breakdown/00-intent/purpose.md](docs/breakdown/00-intent/purpose.md) — design intent, scope, and project overview
+- [docs/breakdown/](docs/breakdown/) — full product breakdown structure (7 layers: intent, product, architecture, implementation, verification, operation, evolution)
+- [docs/breakdown/decision-log.md](docs/breakdown/decision-log.md) — architecture decisions (AD-001 through AD-008)

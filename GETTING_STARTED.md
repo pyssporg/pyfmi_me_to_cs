@@ -22,10 +22,10 @@ Before starting, install the following:
 
 | Dependency | Minimum Version | Notes |
 |------------|----------------|-------|
-| Python     | 3.10           | |
+| Python     | 3.11           | |
 | CMake      | 3.20           | Build system for generated C wrapper |
-| C compiler | —              | gcc or clang (Linux x86_64 only; see [AD-006](product-breakdown/02-architecture/decisions/AD-006-linux-x86-64-v1.md)) |
-| vcpkg      | —              | With SUNDIALS installed (see [AD-007](product-breakdown/02-architecture/decisions/AD-007-vcpkg-package-manager.md)) |
+| C compiler | —              | gcc or clang (Linux x86_64 only; see [AD-006](docs/breakdown/01-product/decisions/AD-006-linux-x86-64-v1.md)) |
+| vcpkg      | —              | With SUNDIALS installed (see [AD-007](docs/breakdown/02-architecture/decisions/AD-007-vcpkg-package-manager.md)) |
 
 To install SUNDIALS via vcpkg:
 ```bash
@@ -197,7 +197,7 @@ This prints each pipeline phase and any warnings from the mapping step.
   FMU solves and how internal coupling is evaluated
 - [README.md](README.md) — project overview, CLI reference, prerequisites
 - [CONTRIBUTING.md](CONTRIBUTING.md) — developer guide and how to contribute
-- [product-breakdown/00-intent/purpose.md](product-breakdown/00-intent/purpose.md) — design intent, scope, architecture motivation
-- [product-breakdown/](product-breakdown/) — full product breakdown structure
-- [product-breakdown/02-architecture/decisions/](product-breakdown/02-architecture/decisions/) — architecture decision records
-- [product-breakdown/06-evolution/candidates/](product-breakdown/06-evolution/candidates/) — proposed improvements and feature candidates
+- [docs/breakdown/00-intent/purpose.md](docs/breakdown/00-intent/purpose.md) — design intent, scope, architecture motivation
+- [docs/breakdown/](docs/breakdown/) — full product breakdown structure
+- [docs/breakdown/02-architecture/decisions/](docs/breakdown/02-architecture/decisions/) — architecture decision records
+- [docs/breakdown/06-evolution/candidates/](docs/breakdown/06-evolution/candidates/) — proposed improvements and feature candidates

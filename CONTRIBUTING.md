@@ -13,11 +13,11 @@
 
 ## Getting Started
 - If you are new to the project, start with GETTING_STARTED.md for a from-scratch walkthrough and README.md for an overview.
-- `product-breakdown/00-intent/purpose.md` explains design intent and scope.
+- `docs/breakdown/00-intent/purpose.md` explains design intent and scope.
 
 ## Development Setup
 1. Clone the repository.
-2. Create a Python virtual environment (Python >= 3.10 required):
+2. Create a Python virtual environment (Python >= 3.11 required):
    ```bash
    python3 -m venv venv
    source venv/bin/activate
@@ -38,7 +38,9 @@ The project uses pytest:
 pytest
 ```
 All tests must pass before submitting changes. If you add functionality,
-add corresponding tests in the `tests/` directory.
+add corresponding tests in the `tests/` directory. CI runs the reduced gate
+`pytest -m "not verification"` and then the OMC/fmpy verification file
+`pytest -m verification tests/test_cs_behavior_verification.py` separately.
 
 To run a specific test file:
 ```bash
@@ -58,8 +60,8 @@ A quick overview of key directories and files:
 | `src/cs_fmu_packager/codegen/` | C wrapper code generation (f-string) |
 | `src/cs_fmu_packager/packager.py` | Final FMU assembly (ZIP) |
 | `src/cs_fmu_packager/models.py` | Dataclass definitions |
-| `product-breakdown/` | Product breakdown structure (7 layers) |
-| `c_headers/` | C header files included in generated FMU |
+| `docs/breakdown/` | Product breakdown structure (7 layers) |
+| `src/cs_fmu_packager/c_headers/` | FMI 2.0 C headers shipped as package data |
 
 ## Making Changes
 
@@ -67,9 +69,9 @@ A quick overview of key directories and files:
 Open a pull request directly. No issue required for typos, docs, or minor bug fixes.
 
 ### New features or design changes
-1. Open an issue first or check the candidate proposals in `product-breakdown/06-evolution/candidates/`.
+1. Open an issue first or check the candidate proposals in `docs/breakdown/06-evolution/candidates/`.
 2. Discuss the approach before implementing.
-3. For changes that affect packaging behavior, solver strategy, or the spec format, update or create an architecture decision record (AD) in `product-breakdown/02-architecture/decisions/`.
+3. For changes that affect packaging behavior, solver strategy, or the spec format, update or create an architecture decision record (AD) in `docs/breakdown/02-architecture/decisions/`.
 
 ## Pull Request Process
 1. Ensure all tests pass.
@@ -80,16 +82,16 @@ Open a pull request directly. No issue required for typos, docs, or minor bug fi
 6. Keep PRs focused — one logical change per PR.
 
 ## Coding Conventions
-- Python: target Python 3.10+. Use type hints. Follow PEP 8 (enforced by convention; no automated linter configured yet).
+- Python: target Python 3.11+. Use type hints. Follow PEP 8. Lint with `ruff check src tests`; `ruff.toml` at the repo root configures the rule set that CI enforces.
 - C (generated code templates): C99. Consistent indentation (4 spaces). Avoid platform-specific idioms beyond Linux x86_64 (see AD-006).
 - Tests: prefer pytest style over unittest.TestCase.
 - Error messages: clear, actionable, and specific. Include the offending value and expected constraint.
 
 ## Documentation & Decision Records
-- Use `product-breakdown/` to document intent, product scope, architecture, implementation decisions, verification strategy, operation, and evolution candidates.
-- Architecture decision records (AD-001 through AD-007) live in `product-breakdown/02-architecture/decisions/`.
-- The decision log at `product-breakdown/decision-log.md` indexes all ADs.
-- Evolution candidates in `product-breakdown/06-evolution/candidates/` are proposals; they need a task contract before implementation begins.
+- Use `docs/breakdown/` to document intent, product scope, architecture, implementation decisions, verification strategy, operation, and evolution candidates.
+- Architecture decision records (AD-001 through AD-008) live in `docs/breakdown/02-architecture/decisions/`; AD-006 is under `docs/breakdown/01-product/decisions/`.
+- The decision log at `docs/breakdown/decision-log.md` indexes all ADs.
+- Evolution candidates in `docs/breakdown/06-evolution/candidates/` are proposals; they need a task contract before implementation begins.
 
 ## Questions & Support
 Open a GitHub issue for questions, bug reports, or feature requests.
