@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Port FMU handling onto the `experimental_pyssp_standard` facade API and pin
+- Port FMU handling onto the `pyssp_standard_exp` facade API and pin
   it to the v0.9.3.dev0 release wheel.
 - Harden the ecosystem CI workflows, add a changelog and ruff config, and
   update the `cs_behavior` and end-to-end tests.
