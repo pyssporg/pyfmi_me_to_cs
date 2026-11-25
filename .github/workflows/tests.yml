@@ -51,7 +51,12 @@ jobs:
           ruff check src tests
 
       - name: Install OpenModelica
-        run: sudo apt-get update && sudo apt-get install -y omc
+        run: |
+          curl -fsSL https://build.openmodelica.org/apt/openmodelica.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/openmodelica-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/openmodelica-keyring.gpg] https://build.openmodelica.org/apt $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+            | sudo tee /etc/apt/sources.list.d/openmodelica.list >/dev/null
+          sudo apt-get update && sudo apt-get install -y omc
 
       - name: Generate fixture FMUs
         run: make generate-fixtures
