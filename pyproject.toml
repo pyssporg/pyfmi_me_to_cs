@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "click>=8.0",
     "toml>=0.10",
-    "pyfmi-interfaces>=0.5.1",
+    "pyfmi-interfaces @ https://github.com/pyssporg/pyfmi_interfaces/releases/download/v0.5.3/pyfmi_interfaces-0.5.3-py3-none-any.whl",
     "experimental-pyssp-standard @ https://github.com/pyssporg/pyssp_standard_exp/releases/download/v0.9.4.dev0/experimental_pyssp_standard-0.9.4.dev0-py3-none-any.whl",
 ]
 

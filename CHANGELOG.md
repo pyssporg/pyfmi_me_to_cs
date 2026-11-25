@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-24
+
+### Changed
+
+- Emit `modelDescription` through `pyfmi_interfaces` instead of local
+  schema code.
+- Raise the Python floor to >=3.11 and move to a `src/` layout with a
+  setuptools dynamic version.
+- Re-pin the sibling dependencies on their release wheels.
+
+### Docs
+
+- Add the `docs/breakdown` tree and fix the breakdown links and setup
+  guidance.
+
 ## [0.1.1] - 2026-11-09
 
 ### Added
