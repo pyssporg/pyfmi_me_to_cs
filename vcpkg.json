@@ -4,5 +4,5 @@
   "dependencies": [
     "sundials"
   ],
-  "builtin-baseline": "7ab0a18897c59c58fccb38c7ba16d2deb9a02914"
+  "builtin-baseline": "7281d8d64321f945f296e696d8561f68c8186c67"
 }

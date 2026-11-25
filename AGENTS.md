@@ -83,8 +83,7 @@ outputs, parameters, and status information at the wrapper boundary.
 
 ## Environment
 
-- Python >= 3.11 (`requires-python`); the CI matrix currently lists 3.10,
-  3.11, and 3.12, so 3.10 is below the package floor.
+- Python >= 3.11 (`requires-python`); the CI matrix runs 3.11 and 3.12.
 - CMake >= 3.20, C compiler (gcc/clang), vcpkg with SUNDIALS.
 - `python3 -m venv venv`, `source venv/bin/activate`,
   `pip install -e ".[dev]"`.
