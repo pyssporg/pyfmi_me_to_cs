@@ -42,6 +42,7 @@ where = ["src"]
 "cs_fmu_packager" = ["c_headers/*", "codegen/*.h"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "verification: behavioral verification tests requiring OMC and fmpy",
 ]
