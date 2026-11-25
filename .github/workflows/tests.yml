@@ -50,13 +50,16 @@ jobs:
           python -m pip install ruff
           ruff check src tests
 
-      - name: Install OpenModelica
+      - name: Install OpenModelica and the standard library
         run: |
           curl -fsSL https://build.openmodelica.org/apt/openmodelica.asc \
             | sudo gpg --dearmor -o /usr/share/keyrings/openmodelica-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/openmodelica-keyring.gpg] https://build.openmodelica.org/apt $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
             | sudo tee /etc/apt/sources.list.d/openmodelica.list >/dev/null
           sudo apt-get update && sudo apt-get install -y omc
+          printf 'installPackage(Modelica);\n' > "$RUNNER_TEMP/install-msl.mos"
+          omc "$RUNNER_TEMP/install-msl.mos"
+          ls "$HOME/.openmodelica/libraries" | grep -q "^Modelica "
 
       - name: Generate fixture FMUs
         run: make generate-fixtures
